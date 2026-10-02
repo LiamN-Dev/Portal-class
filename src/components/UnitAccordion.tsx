@@ -6,6 +6,7 @@ import {
   Unlock,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Copy,
   Check,
   ExternalLink,
@@ -14,11 +15,11 @@ import {
   Clock,
   Sparkles,
   Users,
-  ShieldAlert,
-  FileCheck2,
   Trash2,
   Edit2,
   Info,
+  ArrowUpDown,
+  MoveRight,
 } from 'lucide-react';
 import type { Course, Unit, ResourceItem, User } from '../types/index.ts';
 import {
@@ -38,7 +39,11 @@ interface UnitAccordionProps {
   onAddResource: (unitId: string) => void;
   onAddUnit: () => void;
   onEditUnit: (unit: Unit) => void;
+  onDeleteUnit?: (unitId: string) => void;
+  onReorderUnit?: (unitId: string, direction: 'up' | 'down') => void;
+  onEditResource?: (resource: ResourceItem) => void;
   onDeleteResource: (resourceId: string) => void;
+  onMoveResource?: (resourceId: string, newUnitId: string) => void;
   filterNewOnly?: boolean;
 }
 
@@ -52,9 +57,16 @@ export function UnitAccordion({
   onAddResource,
   onAddUnit,
   onEditUnit,
+  onDeleteUnit,
+  onReorderUnit,
+  onEditResource,
   onDeleteResource,
+  onMoveResource,
   filterNewOnly,
 }: UnitAccordionProps) {
+  // Category filter inside active course
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
+
   // By default expand units that are spotlighted or active
   const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -66,6 +78,7 @@ export function UnitAccordion({
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedSnippets, setExpandedSnippets] = useState<Record<string, boolean>>({});
+  const [movingResourceId, setMovingResourceId] = useState<string | null>(null);
 
   const colorStyle = getCourseColorClasses(course.color);
 
@@ -77,7 +90,7 @@ export function UnitAccordion({
     const success = await copyToClipboard(resource.url);
     if (success) {
       setCopiedId(resource.id);
-      setTimeout(() => setCopiedId(null), 2200);
+      setTimeout(() => setCopiedId(null), 2000);
     }
   };
 
@@ -137,45 +150,70 @@ export function UnitAccordion({
 
   return (
     <div className="space-y-4">
-      {/* Course Header Banner */}
+      {/* Course Banner - Clean & Focused */}
       <div
-        className={`rounded-2xl p-5 sm:p-6 border ${colorStyle.border}/40 bg-gradient-to-br ${colorStyle.headerGradient} dark:bg-slate-900 shadow-sm relative overflow-hidden`}
+        className={`rounded-3xl p-5 sm:p-6 border ${colorStyle.border}/30 bg-gradient-to-br ${colorStyle.headerGradient} dark:bg-slate-900 shadow-xs relative overflow-hidden`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-2">
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${colorStyle.badge}`}>
                 {course.code} &bull; {course.period}
               </span>
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Room {course.room} &bull; Instructor: {course.teacher}
+                Room {course.room} &bull; {course.teacher}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1.5">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight mt-1.5">
               {course.name}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 max-w-3xl leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
               {course.description}
             </p>
           </div>
 
-          {isAdmin && (
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            {isAdmin && (
+              <button
+                onClick={onAddUnit}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Unit</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* In-Course Category Filters */}
+        <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center space-x-2 text-xs overflow-x-auto">
+          <span className="text-slate-400 font-semibold text-[11px]">View:</span>
+          {[
+            { id: 'all', label: 'All Units & Items' },
+            { id: 'completed_hw', label: '✓ Completed HW Keys' },
+            { id: 'study_guide', label: 'Study Guides' },
+            { id: 'practice_exam', label: 'Practice Exams' },
+          ].map((cat) => (
             <button
-              onClick={onAddUnit}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all cursor-pointer self-start sm:self-center"
+              key={cat.id}
+              onClick={() => setActiveCategoryFilter(cat.id)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+                activeCategoryFilter === cat.id
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                  : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-white'
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              <span>Add Unit to Course</span>
+              {cat.label}
             </button>
-          )}
+          ))}
         </div>
       </div>
 
       {/* Units List */}
       <div className="space-y-3">
         {units.length === 0 ? (
-          <div className="text-center py-12 border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900">
+          <div className="text-center py-12 border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl bg-white dark:bg-slate-900">
             <Folder className="w-10 h-10 text-slate-400 mx-auto mb-2" />
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               No units defined for this course yet.
@@ -183,20 +221,27 @@ export function UnitAccordion({
             {isAdmin && (
               <button
                 onClick={onAddUnit}
-                className="mt-3 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-lg"
+                className="mt-3 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl"
               >
-                Create Unit 1
+                + Create Unit 1
               </button>
             )}
           </div>
         ) : (
-          units.map((unit) => {
+          units.map((unit, unitIdx) => {
             const isExpanded = !!expandedUnits[unit.id];
             const isUnitLocked = unit.status === 'locked' && !isAdmin;
 
             let unitResources = resources.filter((r) => r.unitId === unit.id);
+
+            // Filter by activeCategoryFilter
+            if (activeCategoryFilter === 'completed_hw') {
+              unitResources = unitResources.filter((r) => r.isCompletedHw);
+            } else if (activeCategoryFilter !== 'all') {
+              unitResources = unitResources.filter((r) => r.category === activeCategoryFilter);
+            }
+
             if (filterNewOnly) {
-              // Only resources added in the last 7 days
               const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
               unitResources = unitResources.filter(
                 (r) => new Date(r.createdAt).getTime() > sevenDaysAgo
@@ -208,14 +253,14 @@ export function UnitAccordion({
                 key={unit.id}
                 className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
                   unit.isActiveSpotlight
-                    ? `border-indigo-400 dark:border-indigo-600 shadow-md ring-1 ring-indigo-400/30 bg-white dark:bg-slate-900`
+                    ? `border-indigo-400 dark:border-indigo-600 shadow-sm ring-1 ring-indigo-400/20 bg-white dark:bg-slate-900`
                     : 'border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/90'
                 }`}
               >
                 {/* Unit Header */}
                 <div
                   onClick={() => !isUnitLocked && toggleUnit(unit.id)}
-                  className={`p-4 sm:p-4.5 flex items-center justify-between cursor-pointer select-none transition-colors ${
+                  className={`p-4 flex items-center justify-between cursor-pointer select-none transition-colors ${
                     isUnitLocked
                       ? 'bg-slate-100/60 dark:bg-slate-800/40 cursor-not-allowed opacity-80'
                       : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/50'
@@ -274,18 +319,49 @@ export function UnitAccordion({
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1.5">
+                    {/* Admin Unit Reorder / Edit / Delete */}
                     {isAdmin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditUnit(unit);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg"
-                        title="Edit Unit Settings"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                        {unitIdx > 0 && onReorderUnit && (
+                          <button
+                            onClick={() => onReorderUnit(unit.id, 'up')}
+                            className="p-1 text-slate-400 hover:text-indigo-600 rounded"
+                            title="Move Unit Up"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                        )}
+                        {unitIdx < units.length - 1 && onReorderUnit && (
+                          <button
+                            onClick={() => onReorderUnit(unit.id, 'down')}
+                            className="p-1 text-slate-400 hover:text-indigo-600 rounded"
+                            title="Move Unit Down"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => onEditUnit(unit)}
+                          className="p-1 text-slate-400 hover:text-indigo-600 rounded"
+                          title="Edit Unit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {onDeleteUnit && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Delete ${unit.title} and its resources?`)) {
+                                onDeleteUnit(unit.id);
+                              }
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-500 rounded"
+                            title="Delete Unit"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     {!isUnitLocked && (
@@ -302,10 +378,10 @@ export function UnitAccordion({
 
                 {/* Unit Content Items */}
                 {isExpanded && !isUnitLocked && (
-                  <div className="border-t border-slate-100 dark:border-slate-800 p-3 sm:p-4 space-y-3 bg-slate-50/50 dark:bg-slate-950/40">
+                  <div className="border-t border-slate-100 dark:border-slate-800 p-3 sm:p-4 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/40">
                     {unitResources.length === 0 ? (
                       <div className="text-center py-6 text-xs text-slate-500">
-                        No resources posted for this unit yet.
+                        No materials posted under this filter yet.
                       </div>
                     ) : (
                       unitResources.map((item) => {
@@ -314,21 +390,21 @@ export function UnitAccordion({
                         const TypeIcon = typeConfig.icon;
                         const lockState = isResourceLocked(item);
 
-                        // If locked, render the dedicated Padlock UI Card
+                        // Padlock Card if locked
                         if (lockState.locked) {
                           return (
                             <div
                               key={item.id}
-                              className="rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/30 p-3.5 sm:p-4 transition-all"
+                              className="rounded-2xl border border-amber-300 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/30 p-3.5 transition-all"
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div className="flex items-start space-x-3">
-                                  <div className="mt-0.5 w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center flex-shrink-0">
+                                  <div className="mt-0.5 w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center flex-shrink-0">
                                     <Lock className="w-4 h-4" />
                                   </div>
 
                                   <div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-1.5">
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
                                         🔒 Locked Resource
                                       </span>
@@ -340,10 +416,6 @@ export function UnitAccordion({
                                     <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-1 line-through opacity-75">
                                       {item.title}
                                     </h4>
-
-                                    <p className="text-xs text-slate-500 mt-0.5">
-                                      This material is locked for your current profile. Submit an unlock request with a reason (e.g. absent for sickness or sports meet) to request access.
-                                    </p>
                                   </div>
                                 </div>
 
@@ -359,20 +431,20 @@ export function UnitAccordion({
                           );
                         }
 
-                        // Normal Unlocked Resource Card
+                        // Normal Unlocked Item Card
                         return (
                           <div
                             key={item.id}
-                            className={`rounded-xl border bg-white dark:bg-slate-800/90 p-3.5 sm:p-4 transition-all shadow-xs hover:shadow-md ${
+                            className={`rounded-2xl border bg-white dark:bg-slate-800/90 p-3.5 transition-all shadow-2xs hover:shadow-sm ${
                               item.isCompletedHw
-                                ? 'border-emerald-300 dark:border-emerald-900/60 ring-1 ring-emerald-500/20'
+                                ? 'border-emerald-300 dark:border-emerald-900/60 ring-1 ring-emerald-500/15'
                                 : 'border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
                             }`}
                           >
                             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                               <div className="flex items-start space-x-3 min-w-0">
                                 <div
-                                  className={`mt-0.5 w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border ${typeConfig.color}`}
+                                  className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 border ${typeConfig.color}`}
                                 >
                                   <TypeIcon className="w-4 h-4" />
                                 </div>
@@ -402,14 +474,7 @@ export function UnitAccordion({
 
                                     {item.visibilityScope === 'admin_only' && (
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200">
-                                        Draft Only
-                                      </span>
-                                    )}
-
-                                    {item.scheduledUnlockAt && (
-                                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 flex items-center gap-1">
-                                        <Clock className="w-2.5 h-2.5" />
-                                        <span>Auto-Unlocked</span>
+                                        Draft
                                       </span>
                                     )}
 
@@ -424,43 +489,27 @@ export function UnitAccordion({
                                     {item.title}
                                   </h4>
 
-                                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                                    {item.description}
-                                  </p>
-
-                                  {/* Tags and Contributor */}
-                                  <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-400">
-                                    {item.submittedBy && (
-                                      <span>
-                                        Posted by: <strong className="text-slate-600 dark:text-slate-300">{item.submittedBy}</strong>
-                                      </span>
-                                    )}
-
-                                    {item.tags.map((tag) => (
-                                      <span
-                                        key={tag}
-                                        className="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.2 rounded text-[10px] font-medium text-slate-600 dark:text-slate-300"
-                                      >
-                                        #{tag}
-                                      </span>
-                                    ))}
-                                  </div>
+                                  {item.description && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
+                                      {item.description}
+                                    </p>
+                                  )}
 
                                   {/* Quick Preview Snippet toggle */}
                                   {item.previewSnippet && (
-                                    <div className="mt-2.5">
+                                    <div className="mt-1.5">
                                       <button
                                         onClick={() => toggleSnippet(item.id)}
                                         className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
                                       >
                                         <Info className="w-3 h-3" />
                                         <span>
-                                          {expandedSnippets[item.id] ? 'Hide Solution Notes' : 'Peek Solution Key Snippet'}
+                                          {expandedSnippets[item.id] ? 'Hide Key Snippet' : 'Peek Solution Snippet'}
                                         </span>
                                       </button>
 
                                       {expandedSnippets[item.id] && (
-                                        <div className="mt-1.5 p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 text-xs font-mono text-slate-800 dark:text-slate-200">
+                                        <div className="mt-1 p-2 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 text-xs font-mono text-slate-800 dark:text-slate-200">
                                           {item.previewSnippet}
                                         </div>
                                       )}
@@ -474,7 +523,7 @@ export function UnitAccordion({
                                 {/* One-Click Clipboard Copy */}
                                 <button
                                   onClick={() => handleCopyLink(item)}
-                                  className={`p-2 rounded-lg border transition-all cursor-pointer ${
+                                  className={`p-2 rounded-xl border transition-all cursor-pointer ${
                                     copiedId === item.id
                                       ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm'
                                       : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600'
@@ -482,9 +531,9 @@ export function UnitAccordion({
                                   title="Copy link to clipboard"
                                 >
                                   {copiedId === item.id ? (
-                                    <Check className="w-4 h-4 animate-scale" />
+                                    <Check className="w-3.5 h-3.5 animate-scale" />
                                   ) : (
-                                    <Copy className="w-4 h-4" />
+                                    <Copy className="w-3.5 h-3.5" />
                                   )}
                                 </button>
 
@@ -493,20 +542,74 @@ export function UnitAccordion({
                                   href={item.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 rounded-lg shadow-sm transition-all"
+                                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 rounded-xl shadow-xs transition-all"
                                 >
-                                  <span>Open Resource</span>
+                                  <span>Open</span>
                                   <ExternalLink className="w-3.5 h-3.5" />
                                 </a>
 
+                                {/* Admin Reorganize / Edit / Delete */}
                                 {isAdmin && (
-                                  <button
-                                    onClick={() => onDeleteResource(item.id)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer"
-                                    title="Delete Resource"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <div className="flex items-center space-x-1 pl-1 border-l border-slate-200 dark:border-slate-700">
+                                    {onEditResource && (
+                                      <button
+                                        onClick={() => onEditResource(item)}
+                                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg cursor-pointer"
+                                        title="Edit Resource"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+
+                                    {/* Move to another unit */}
+                                    {onMoveResource && (
+                                      <div className="relative">
+                                        <button
+                                          onClick={() =>
+                                            setMovingResourceId(
+                                              movingResourceId === item.id ? null : item.id
+                                            )
+                                          }
+                                          className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg cursor-pointer"
+                                          title="Move to another Unit"
+                                        >
+                                          <ArrowUpDown className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        {movingResourceId === item.id && (
+                                          <div
+                                            className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-1.5 z-20"
+                                            onMouseLeave={() => setMovingResourceId(null)}
+                                          >
+                                            <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase">
+                                              Move to Unit:
+                                            </p>
+                                            {units.map((u) => (
+                                              <button
+                                                key={u.id}
+                                                disabled={u.id === item.unitId}
+                                                onClick={() => {
+                                                  onMoveResource(item.id, u.id);
+                                                  setMovingResourceId(null);
+                                                }}
+                                                className="w-full text-left px-2 py-1 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded disabled:opacity-40"
+                                              >
+                                                {u.title}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    <button
+                                      onClick={() => onDeleteResource(item.id)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                                      title="Delete Resource"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -519,10 +622,10 @@ export function UnitAccordion({
                     {isAdmin && (
                       <button
                         onClick={() => onAddResource(unit.id)}
-                        className="w-full py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer bg-white/50 dark:bg-slate-900/50"
+                        className="w-full py-2 border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer bg-white/40 dark:bg-slate-900/40"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Post Material or Completed HW Key to {unit.title}</span>
+                        <span>Post Material or Key to {unit.title}</span>
                       </button>
                     )}
                   </div>

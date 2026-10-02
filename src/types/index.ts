@@ -115,6 +115,29 @@ export interface NoteRequest {
   fulfilledUrl?: string;
 }
 
+export interface AdminPopup {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'urgent';
+  scope: 'global' | 'user';
+  targetUserId?: string;
+  targetUserName?: string;
+  createdAt: string;
+  active: boolean;
+  actionUrl?: string;
+  actionText?: string;
+}
+
+export interface SiteSettings {
+  maintenanceMode: {
+    enabled: boolean;
+    countdownTarget?: string;
+    message: string;
+  };
+  aiTutorEnabled: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';

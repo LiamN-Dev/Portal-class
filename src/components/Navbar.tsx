@@ -34,6 +34,7 @@ interface NavbarProps {
   pendingCount: number;
   isDark: boolean;
   onToggleTheme: () => void;
+  aiTutorEnabled: boolean;
 }
 
 export function Navbar({
@@ -53,6 +54,7 @@ export function Navbar({
   pendingCount,
   isDark,
   onToggleTheme,
+  aiTutorEnabled,
 }: NavbarProps) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [previewDropdownOpen, setPreviewDropdownOpen] = useState(false);
@@ -102,20 +104,18 @@ export function Navbar({
         </div>
 
         {/* Center: Command Palette Search Bar */}
-        <div className="flex-1 max-w-md hidden md:block">
+        <div className="flex-1 max-w-[200px] sm:max-w-xs hidden md:block">
           <button
             onClick={onOpenSearch}
-            className="w-full flex items-center justify-between px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl shadow-xs transition-all cursor-pointer group"
+            className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl shadow-xs transition-all cursor-pointer group"
           >
-            <div className="flex items-center space-x-2.5">
-              <Search className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
-              <span className="font-normal">Search units, homework keys, notes...</span>
+            <div className="flex items-center space-x-2 truncate">
+              <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 transition-colors flex-shrink-0" />
+              <span className="truncate">Search (⌘K)</span>
             </div>
-            <div className="flex items-center space-x-1">
-              <kbd className="px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded shadow-2xs">
-                ⌘K
-              </kbd>
-            </div>
+            <kbd className="px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-500 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded flex-shrink-0">
+              ⌘K
+            </kbd>
           </button>
         </div>
 
@@ -232,15 +232,26 @@ export function Navbar({
             </div>
           )}
 
-          {/* AI Study Assistant Button */}
-          <button
-            onClick={onOpenAI}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded-lg shadow-sm shadow-indigo-500/25 transition-all cursor-pointer"
-            title="Ask AI Peer Tutor or Analyze Homework Photo"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span className="hidden sm:inline">AI Tutor</span>
-          </button>
+          {/* AI Study Assistant Button - Only active if enabled by admin */}
+          {(aiTutorEnabled || isAdmin) && (
+            <button
+              onClick={onOpenAI}
+              className={`inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer ${
+                aiTutorEnabled
+                  ? 'text-white bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-indigo-500/25'
+                  : 'text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800'
+              }`}
+              title={aiTutorEnabled ? 'Ask AI Peer Tutor or Analyze Homework Photo' : 'AI Tutor (Admin Preview - Disabled for students)'}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span className="hidden sm:inline">AI Tutor</span>
+              {!aiTutorEnabled && isAdmin && (
+                <span className="text-[9px] px-1 py-0.2 rounded bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-200 font-bold ml-1">
+                  OFF
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Export Backup Button */}
           <button

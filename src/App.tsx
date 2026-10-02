@@ -1,15 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Vault,
-  Sparkles,
   BookOpen,
   Plus,
-  HelpCircle,
-  Inbox,
-  ShieldCheck,
-  Eye,
-  Search,
-  Filter,
+  ShieldAlert,
+  LogOut,
+  Sliders,
 } from 'lucide-react';
 import type {
   Course,
@@ -19,6 +15,8 @@ import type {
   UnlockRequest,
   StudentSubmission,
   NoteRequest,
+  AdminPopup,
+  SiteSettings,
 } from './types/index.ts';
 
 // Components
@@ -33,10 +31,12 @@ import { StudentSubmitModal } from './components/StudentSubmitModal.tsx';
 import { RequestNotesModal } from './components/RequestNotesModal.tsx';
 import { AIStudyAssistant } from './components/AIStudyAssistant.tsx';
 import { BackupExportModal } from './components/BackupExportModal.tsx';
-import { AuthModal } from './components/AuthModal.tsx';
 import { CourseModal } from './components/CourseModal.tsx';
 import { UnitModal } from './components/UnitModal.tsx';
 import { ResourceModal } from './components/ResourceModal.tsx';
+import { LoginScreen } from './components/LoginScreen.tsx';
+import { MaintenanceScreen } from './components/MaintenanceScreen.tsx';
+import { PopupAnnouncementModal } from './components/PopupAnnouncementModal.tsx';
 
 export default function App() {
   // Theme state
@@ -63,10 +63,22 @@ export default function App() {
   const [unlockRequests, setUnlockRequests] = useState<UnlockRequest[]>([]);
   const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
   const [noteRequests, setNoteRequests] = useState<NoteRequest[]>([]);
+  const [popups, setPopups] = useState<AdminPopup[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
+    maintenanceMode: {
+      enabled: false,
+      countdownTarget: new Date(Date.now() + 3600 * 1000 * 2).toISOString(),
+      message: 'StudyVault is undergoing scheduled unit restructuring and updates. Back soon!',
+    },
+    aiTutorEnabled: false,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Active User / Session (defaults to pre-seeded Admin Liam for seamless experience)
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // Authentication State: On site open, users must sign in!
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('studyvault_logged_in_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [impersonatingUser, setImpersonatingUser] = useState<User | null>(null);
 
   // Selected Course
@@ -75,7 +87,6 @@ export default function App() {
 
   // Modals state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAdminQueueOpen, setIsAdminQueueOpen] = useState(false);
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isRequestNotesOpen, setIsRequestNotesOpen] = useState(false);
@@ -97,7 +108,7 @@ export default function App() {
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [lockedResourceTarget, setLockedResourceTarget] = useState<ResourceItem | null>(null);
 
-  // Fetch initial state
+  // Fetch initial state from server
   const fetchState = useCallback(async () => {
     try {
       const res = await fetch('/api/state');
@@ -110,13 +121,16 @@ export default function App() {
         setUnlockRequests(data.unlockRequests || []);
         setSubmissions(data.submissions || []);
         setNoteRequests(data.noteRequests || []);
+        if (data.siteSettings) setSiteSettings(data.siteSettings);
+        if (data.popups) setPopups(data.popups);
 
-        // Set default user to Admin if not set
-        if (!currentUser) {
-          const savedUserId = localStorage.getItem('studyvault_active_user');
-          const found = data.users?.find((u: User) => u.id === savedUserId);
-          const defaultAdmin = data.users?.find((u: User) => u.role === 'admin');
-          setCurrentUser(found || defaultAdmin || null);
+        // Verify current user is still valid
+        if (currentUser) {
+          const fresh = data.users?.find((u: User) => u.id === currentUser.id);
+          if (fresh) {
+            setCurrentUser(fresh);
+            localStorage.setItem('studyvault_logged_in_user', JSON.stringify(fresh));
+          }
         }
 
         if (!selectedCourseId && data.courses && data.courses.length > 0) {
@@ -134,13 +148,6 @@ export default function App() {
     fetchState();
   }, [fetchState]);
 
-  // Save active user in localStorage
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('studyvault_active_user', currentUser.id);
-    }
-  }, [currentUser]);
-
   // Effective user taking impersonation into account
   const effectiveUser = impersonatingUser || currentUser;
   const isAdmin = currentUser?.role === 'admin' && !impersonatingUser;
@@ -152,7 +159,7 @@ export default function App() {
     return courses.filter((c) => effectiveUser.enrolledCourseIds.includes(c.id));
   }, [courses, isAdmin, effectiveUser]);
 
-  // Ensure selected course is valid for user
+  // Ensure selected course is valid
   useEffect(() => {
     if (visibleCourses.length > 0) {
       const exists = visibleCourses.some((c) => c.id === selectedCourseId);
@@ -177,7 +184,7 @@ export default function App() {
     return activeCourseUnits.find((u) => u.isActiveSpotlight) || null;
   }, [activeCourseUnits]);
 
-  // Dynamic Urgency Scoring: course with nearest upcoming exam/due date
+  // Dynamic Urgency Scoring
   const urgentCourse = useMemo(() => {
     const coursesWithDueDate = visibleCourses.filter(
       (c) => c.nextDueDate && new Date(c.nextDueDate).getTime() > Date.now()
@@ -203,18 +210,20 @@ export default function App() {
     return pendingUsers + pendingUnlocks + pendingSubs;
   }, [users, unlockRequests, submissions]);
 
-  // Handlers for Login & Switch
-  const handleLogin = async (username: string) => {
+  // Authentication Handlers
+  const handleLogin = async (username: string, password?: string) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
 
     setCurrentUser(data.user);
     setImpersonatingUser(null);
+    localStorage.setItem('studyvault_logged_in_user', JSON.stringify(data.user));
+    await fetchState();
   };
 
   const handleRegister = async (regData: any) => {
@@ -231,10 +240,10 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     setImpersonatingUser(null);
-    localStorage.removeItem('studyvault_active_user');
+    localStorage.removeItem('studyvault_logged_in_user');
   };
 
-  // Handlers for admin queue approvals
+  // Admin Queue Approvals
   const handleApproveUser = async (userId: string, courseIds: string[]) => {
     await fetch(`/api/admin/users/${userId}/approve-request`, {
       method: 'POST',
@@ -272,7 +281,7 @@ export default function App() {
     await fetchState();
   };
 
-  // Unlock Request handler
+  // Unlock Request Handlers
   const handleOpenUnlockModal = (res: ResourceItem) => {
     setLockedResourceTarget(res);
     setIsUnlockModalOpen(true);
@@ -301,7 +310,7 @@ export default function App() {
     await fetchState();
   };
 
-  // Student submission handler
+  // Student Submissions Handlers
   const handleSubmitMaterial = async (subData: any) => {
     const res = await fetch('/api/submissions', {
       method: 'POST',
@@ -321,7 +330,7 @@ export default function App() {
     await fetchState();
   };
 
-  // Notes request handler
+  // Notes Request Handlers
   const handleSubmitNoteRequest = async (noteData: any) => {
     const res = await fetch('/api/notes-requests', {
       method: 'POST',
@@ -341,7 +350,40 @@ export default function App() {
     await fetchState();
   };
 
-  // Course, Unit, Resource CRUD
+  // Popups Handlers
+  const handleCreatePopup = async (popupData: any) => {
+    await fetch('/api/admin/popups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(popupData),
+    });
+    await fetchState();
+  };
+
+  const handleTogglePopup = async (id: string) => {
+    await fetch(`/api/admin/popups/${id}/toggle`, { method: 'POST' });
+    await fetchState();
+  };
+
+  const handleDeletePopup = async (id: string) => {
+    await fetch(`/api/admin/popups/${id}`, { method: 'DELETE' });
+    await fetchState();
+  };
+
+  // Site Settings Handler
+  const handleUpdateSiteSettings = async (settingsData: Partial<SiteSettings>) => {
+    const res = await fetch('/api/admin/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settingsData),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setSiteSettings(data.siteSettings);
+    }
+  };
+
+  // Course CRUD & Organization
   const handleSaveCourse = async (coursePayload: Course) => {
     const res = await fetch('/api/courses', {
       method: 'POST',
@@ -354,6 +396,26 @@ export default function App() {
     }
   };
 
+  const handleDeleteCourse = async (courseId: string) => {
+    if (confirm('Are you sure you want to permanently delete this course and all its units?')) {
+      await fetch(`/api/courses/${courseId}`, { method: 'DELETE' });
+      await fetchState();
+    }
+  };
+
+  const handleReorderCourses = async (courseIds: string[]) => {
+    const res = await fetch('/api/courses/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courseIds }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setCourses(data.courses);
+    }
+  };
+
+  // Unit CRUD & Organization
   const handleSaveUnit = async (unitPayload: Unit) => {
     const res = await fetch('/api/units', {
       method: 'POST',
@@ -363,6 +425,24 @@ export default function App() {
     if (res.ok) await fetchState();
   };
 
+  const handleDeleteUnit = async (unitId: string) => {
+    await fetch(`/api/units/${unitId}`, { method: 'DELETE' });
+    await fetchState();
+  };
+
+  const handleReorderUnit = async (unitId: string, direction: 'up' | 'down') => {
+    const res = await fetch('/api/units/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unitId, direction }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setUnits(data.units);
+    }
+  };
+
+  // Resource CRUD & Move
   const handleSaveResource = async (resPayload: ResourceItem) => {
     const res = await fetch('/api/resources', {
       method: 'POST',
@@ -373,14 +453,72 @@ export default function App() {
   };
 
   const handleDeleteResource = async (resId: string) => {
-    if (confirm('Are you sure you want to remove this resource from the vault?')) {
+    if (confirm('Remove this resource from the vault?')) {
       await fetch(`/api/resources/${resId}`, { method: 'DELETE' });
       await fetchState();
     }
   };
 
+  const handleMoveResource = async (resourceId: string, newUnitId: string) => {
+    const res = await fetch(`/api/resources/${resourceId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newUnitId }),
+    });
+    if (res.ok) await fetchState();
+  };
+
+  // --- RENDERING CONDITIONAL GATES ---
+
+  // GATE 1: Maintenance Mode for non-admin users
+  const isMaintenanceActive = siteSettings.maintenanceMode.enabled;
+  if (isMaintenanceActive && (!currentUser || currentUser.role !== 'admin')) {
+    return (
+      <MaintenanceScreen
+        settings={siteSettings.maintenanceMode}
+        onAdminLogin={handleLogin}
+      />
+    );
+  }
+
+  // GATE 2: On site open, show Login screen if not authenticated
+  if (!currentUser) {
+    return (
+      <LoginScreen
+        courses={courses}
+        isMaintenanceMode={isMaintenanceActive}
+        maintenanceMessage={siteSettings.maintenanceMode.message}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+      />
+    );
+  }
+
+  // GATE 3: Authenticated Vault View
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+      {/* Admin Maintenance Mode Top Warning Banner */}
+      {isMaintenanceActive && currentUser.role === 'admin' && (
+        <div className="bg-amber-500 text-amber-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-inner z-50">
+          <div className="flex items-center space-x-2">
+            <ShieldAlert className="w-4 h-4 animate-bounce" />
+            <span>
+              ⚠️ MAINTENANCE MODE IS ACTIVE — Regular students are blocked. Only you (Admin) can view the vault.
+            </span>
+          </div>
+          <button
+            onClick={() =>
+              handleUpdateSiteSettings({
+                maintenanceMode: { ...siteSettings.maintenanceMode, enabled: false },
+              })
+            }
+            className="bg-amber-950 hover:bg-black text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+          >
+            Turn Off Maintenance
+          </button>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
@@ -394,26 +532,27 @@ export default function App() {
         onOpenAdminQueue={() => setIsAdminQueueOpen(true)}
         onOpenAI={() => setIsAIOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
-        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenAuth={() => {}}
         onLogout={handleLogout}
         pendingCount={pendingQueueCount}
         isDark={isDark}
         onToggleTheme={() => setIsDark(!isDark)}
+        aiTutorEnabled={siteSettings.aiTutorEnabled}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Dynamic Urgency / Spotlight Banner */}
+        {/* Dynamic Personalized Urgency / Greeting Banner */}
         <UrgencyBanner
           urgentCourse={urgentCourse}
           activeSpotlightUnit={activeSpotlightUnit}
           onSelectCourse={(cId) => setSelectedCourseId(cId)}
           newResourcesCount={newResourcesCount}
-          onFilterNewOnly={() => setFilterNewOnly(!filterNewOnly)}
-          isShowingNewOnly={filterNewOnly}
+          userName={effectiveUser?.name || 'Student'}
+          enrolledCoursesCount={visibleCourses.length}
         />
 
-        {/* Course Tabs (with subject accents & urgency scoring tags) */}
+        {/* Course Tabs (with reordering and admin controls) */}
         <div className="mb-6">
           <CourseTabs
             courses={visibleCourses}
@@ -424,6 +563,12 @@ export default function App() {
               setCourseToEdit(null);
               setIsCourseModalOpen(true);
             }}
+            onEditCourse={(c) => {
+              setCourseToEdit(c);
+              setIsCourseModalOpen(true);
+            }}
+            onDeleteCourse={handleDeleteCourse}
+            onReorderCourses={handleReorderCourses}
           />
         </div>
 
@@ -449,7 +594,14 @@ export default function App() {
               setUnitToEdit(unit);
               setIsUnitModalOpen(true);
             }}
+            onDeleteUnit={handleDeleteUnit}
+            onReorderUnit={handleReorderUnit}
+            onEditResource={(res) => {
+              setResourceToEdit(res);
+              setIsResourceModalOpen(true);
+            }}
             onDeleteResource={handleDeleteResource}
+            onMoveResource={handleMoveResource}
             filterNewOnly={filterNewOnly}
           />
         ) : (
@@ -467,7 +619,7 @@ export default function App() {
                   setCourseToEdit(null);
                   setIsCourseModalOpen(true);
                 }}
-                className="mt-4 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm"
+                className="mt-4 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-sm"
               >
                 + Create First Course Deck
               </button>
@@ -475,6 +627,12 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Broadcast Popups Modal (Targeted or Global) */}
+      <PopupAnnouncementModal
+        popups={popups}
+        currentUser={effectiveUser}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-6 bg-white dark:bg-slate-900 mt-12 text-xs text-slate-500">
@@ -486,22 +644,23 @@ export default function App() {
             <span className="font-bold text-slate-700 dark:text-slate-300">
               StudyVault
             </span>
-            <span>&bull; Academic Resource Hub & Completed HW Keys</span>
+            <span>&bull; Academic Study Materials & Completed HW</span>
           </div>
 
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setIsExportOpen(true)}
-              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
             >
-              Export Full Backup (.md / .json)
+              Export Backup
             </button>
             <span>&bull;</span>
             <button
-              onClick={() => setIsAuthOpen(true)}
-              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              onClick={handleLogout}
+              className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors flex items-center space-x-1 cursor-pointer"
             >
-              Switch Account
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out ({effectiveUser?.name || 'User'})</span>
             </button>
           </div>
         </div>
@@ -530,7 +689,7 @@ export default function App() {
         onSubmitRequest={handleSubmitUnlockRequest}
       />
 
-      {/* Admin Queue & Approval Center */}
+      {/* Admin Queue & Site Operations Center */}
       <AdminQueueModal
         isOpen={isAdminQueueOpen}
         onClose={() => setIsAdminQueueOpen(false)}
@@ -539,6 +698,8 @@ export default function App() {
         units={units}
         unlockRequests={unlockRequests}
         submissions={submissions}
+        popups={popups}
+        siteSettings={siteSettings}
         onApproveUserRequest={handleApproveUser}
         onRejectUserRequest={handleRejectUser}
         onRespondUnlockRequest={handleRespondUnlockRequest}
@@ -546,6 +707,10 @@ export default function App() {
         onUpdateUserCourses={handleUpdateUserCourses}
         onToggleUserStatus={handleToggleUserStatus}
         onResetPassword={handleResetPassword}
+        onCreatePopup={handleCreatePopup}
+        onTogglePopup={handleTogglePopup}
+        onDeletePopup={handleDeletePopup}
+        onUpdateSiteSettings={handleUpdateSiteSettings}
       />
 
       {/* Student Submit Study Guide Modal */}
@@ -583,16 +748,6 @@ export default function App() {
         courses={courses}
         units={units}
         resources={resources}
-      />
-
-      {/* Auth / Switch Account Modal */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        courses={courses}
-        users={users}
-        onLogin={handleLogin}
-        onRegister={handleRegister}
       />
 
       {/* Course Modal */}

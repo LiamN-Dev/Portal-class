@@ -16,6 +16,11 @@ import {
   ExternalLink,
   ShieldCheck,
   Grid,
+  Bell,
+  Sliders,
+  ShieldAlert,
+  Sparkles,
+  Plus,
 } from 'lucide-react';
 import type {
   User,
@@ -23,6 +28,8 @@ import type {
   UnlockRequest,
   StudentSubmission,
   Unit,
+  AdminPopup,
+  SiteSettings,
 } from '../types/index.ts';
 
 interface AdminQueueModalProps {
@@ -33,6 +40,8 @@ interface AdminQueueModalProps {
   units: Unit[];
   unlockRequests: UnlockRequest[];
   submissions: StudentSubmission[];
+  popups: AdminPopup[];
+  siteSettings: SiteSettings;
   onApproveUserRequest: (userId: string, courseIds: string[]) => Promise<void>;
   onRejectUserRequest: (userId: string) => Promise<void>;
   onRespondUnlockRequest: (
@@ -49,6 +58,18 @@ interface AdminQueueModalProps {
   onUpdateUserCourses: (userId: string, courseIds: string[]) => Promise<void>;
   onToggleUserStatus: (userId: string) => Promise<void>;
   onResetPassword: (userId: string, temporaryPassword?: string) => Promise<void>;
+  onCreatePopup: (data: {
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'urgent';
+    scope: 'global' | 'user';
+    targetUserId?: string;
+    actionUrl?: string;
+    actionText?: string;
+  }) => Promise<void>;
+  onTogglePopup: (id: string) => Promise<void>;
+  onDeletePopup: (id: string) => Promise<void>;
+  onUpdateSiteSettings: (settings: Partial<SiteSettings>) => Promise<void>;
 }
 
 export function AdminQueueModal({
@@ -59,6 +80,8 @@ export function AdminQueueModal({
   units,
   unlockRequests,
   submissions,
+  popups,
+  siteSettings,
   onApproveUserRequest,
   onRejectUserRequest,
   onRespondUnlockRequest,
@@ -66,9 +89,13 @@ export function AdminQueueModal({
   onUpdateUserCourses,
   onToggleUserStatus,
   onResetPassword,
+  onCreatePopup,
+  onTogglePopup,
+  onDeletePopup,
+  onUpdateSiteSettings,
 }: AdminQueueModalProps) {
   const [activeTab, setActiveTab] = useState<
-    'accounts' | 'unlocks' | 'submissions' | 'user_matrix'
+    'accounts' | 'unlocks' | 'submissions' | 'user_matrix' | 'popups' | 'settings'
   >('accounts');
 
   const [customCourseModalUser, setCustomCourseModalUser] = useState<User | null>(null);
@@ -77,6 +104,27 @@ export function AdminQueueModal({
   const [adminNoteText, setAdminNoteText] = useState('');
   const [resetPwUserId, setResetPwUserId] = useState<string | null>(null);
   const [newTempPw, setNewTempPw] = useState('study123');
+
+  // New Popup form state
+  const [popupTitle, setPopupTitle] = useState('');
+  const [popupMessage, setPopupMessage] = useState('');
+  const [popupType, setPopupType] = useState<'info' | 'warning' | 'urgent'>('info');
+  const [popupScope, setPopupScope] = useState<'global' | 'user'>('global');
+  const [popupTargetUserId, setPopupTargetUserId] = useState('');
+  const [popupActionUrl, setPopupActionUrl] = useState('');
+  const [popupActionText, setPopupActionText] = useState('');
+  const [isSubmittingPopup, setIsSubmittingPopup] = useState(false);
+
+  // Maintenance form state
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(siteSettings.maintenanceMode.enabled);
+  const [maintenanceTarget, setMaintenanceTarget] = useState(
+    siteSettings.maintenanceMode.countdownTarget
+      ? siteSettings.maintenanceMode.countdownTarget.slice(0, 16)
+      : ''
+  );
+  const [maintenanceMessage, setMaintenanceMessage] = useState(siteSettings.maintenanceMode.message);
+  const [aiTutorToggle, setAiTutorToggle] = useState(siteSettings.aiTutorEnabled);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   if (!isOpen) return null;
 
@@ -102,29 +150,70 @@ export function AdminQueueModal({
     await onUpdateUserCourses(userId, next);
   };
 
+  const handleCreatePopupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!popupTitle.trim() || !popupMessage.trim()) return;
+    setIsSubmittingPopup(true);
+    try {
+      await onCreatePopup({
+        title: popupTitle.trim(),
+        message: popupMessage.trim(),
+        type: popupType,
+        scope: popupScope,
+        targetUserId: popupScope === 'user' ? popupTargetUserId : undefined,
+        actionUrl: popupActionUrl.trim() || undefined,
+        actionText: popupActionText.trim() || undefined,
+      });
+      setPopupTitle('');
+      setPopupMessage('');
+      setPopupActionUrl('');
+      setPopupActionText('');
+    } finally {
+      setIsSubmittingPopup(false);
+    }
+  };
+
+  const handleSaveSiteSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSettings(true);
+    try {
+      await onUpdateSiteSettings({
+        maintenanceMode: {
+          enabled: maintenanceEnabled,
+          countdownTarget: maintenanceTarget ? new Date(maintenanceTarget).toISOString() : undefined,
+          message: maintenanceMessage,
+        },
+        aiTutorEnabled: aiTutorToggle,
+      });
+      alert('Site settings updated successfully!');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[88vh] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[88vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Inbox className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Admin Control & Approval Center
+                  Admin Control & Site Operations
                 </h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                  Private Admin View
+                  Private Admin
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Manage incoming classmate requests, locked vault permits, submissions, and course access.
+                Manage accounts, vault unlocks, announcements, AI tutor toggle, and maintenance mode.
               </p>
             </div>
           </div>
@@ -141,14 +230,14 @@ export function AdminQueueModal({
         <div className="flex border-b border-slate-200 dark:border-slate-800 px-4 pt-2 bg-slate-50/50 dark:bg-slate-950/50 overflow-x-auto text-xs font-semibold">
           <button
             onClick={() => setActiveTab('accounts')}
-            className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'accounts'
                 ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <UserCheck className="w-4 h-4" />
-            <span>Account Requests</span>
+            <span>Accounts</span>
             {pendingAccounts.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-bold">
                 {pendingAccounts.length}
@@ -158,14 +247,14 @@ export function AdminQueueModal({
 
           <button
             onClick={() => setActiveTab('unlocks')}
-            className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'unlocks'
                 ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Lock className="w-4 h-4" />
-            <span>Vault Unlock Requests</span>
+            <span>Vault Unlocks</span>
             {pendingUnlocks.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-bold">
                 {pendingUnlocks.length}
@@ -175,14 +264,14 @@ export function AdminQueueModal({
 
           <button
             onClick={() => setActiveTab('submissions')}
-            className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'submissions'
                 ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <FileCheck2 className="w-4 h-4" />
-            <span>Student Submissions</span>
+            <span>Submissions</span>
             {pendingSubs.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-500 text-white font-bold">
                 {pendingSubs.length}
@@ -192,14 +281,38 @@ export function AdminQueueModal({
 
           <button
             onClick={() => setActiveTab('user_matrix')}
-            className={`flex items-center space-x-2 px-4 py-2.5 border-b-2 transition-colors cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
               activeTab === 'user_matrix'
                 ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Grid className="w-4 h-4" />
-            <span>Course Access Matrix</span>
+            <span>User Matrix</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('popups')}
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'popups'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>Broadcast Popups</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center space-x-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'settings'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Site & Maintenance</span>
           </button>
         </div>
 
@@ -220,7 +333,7 @@ export function AdminQueueModal({
                 pendingAccounts.map((user) => (
                   <div
                     key={user.id}
-                    className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div>
                       <div className="flex items-center space-x-2">
@@ -302,14 +415,14 @@ export function AdminQueueModal({
                   <Lock className="w-8 h-8 mx-auto mb-2 text-amber-500 opacity-60" />
                   <p className="text-sm font-semibold">No pending unlock requests.</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    When classmates request access to padlocked homework keys or study guides, they will show here.
+                    When classmates request access to padlocked homework keys, they will show here.
                   </p>
                 </div>
               ) : (
                 pendingUnlocks.map((req) => (
                   <div
                     key={req.id}
-                    className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 shadow-xs flex flex-col space-y-3"
+                    className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 shadow-xs flex flex-col space-y-3"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
@@ -410,7 +523,7 @@ export function AdminQueueModal({
                   <FileCheck2 className="w-8 h-8 mx-auto mb-2 text-indigo-500 opacity-60" />
                   <p className="text-sm font-semibold">No pending student submissions.</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    When classmates submit study notes or completed worksheets, they will appear here for your review and one-click publishing.
+                    When classmates submit study notes or completed worksheets, they appear here.
                   </p>
                 </div>
               ) : (
@@ -421,7 +534,7 @@ export function AdminQueueModal({
                   return (
                     <div
                       key={sub.id}
-                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 shadow-xs flex flex-col space-y-3"
+                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 shadow-xs flex flex-col space-y-3"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                         <div>
@@ -480,16 +593,16 @@ export function AdminQueueModal({
             </div>
           )}
 
-          {/* TAB 4: User Matrix & Permission Center */}
+          {/* TAB 4: User Matrix */}
           {activeTab === 'user_matrix' && (
             <div className="space-y-4">
-              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
+              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
                 <span className="font-bold">Course Checkbox Matrix:</span> Check or uncheck
                 boxes to instantly grant or revoke access to entire classes for any classmate. Toggle the
                 lock switch to suspend an account if needed.
               </div>
 
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
                     <tr>
@@ -606,7 +719,7 @@ export function AdminQueueModal({
 
               {/* Password Reset Prompt if active */}
               {resetPwUserId && (
-                <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-between">
+                <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <KeyRound className="w-4 h-4 text-amber-600" />
                     <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
@@ -640,6 +753,307 @@ export function AdminQueueModal({
                 </div>
               )}
             </div>
+          )}
+
+          {/* TAB 5: Broadcast Popups */}
+          {activeTab === 'popups' && (
+            <div className="space-y-5">
+              {/* Create New Popup Form */}
+              <form onSubmit={handleCreatePopupSubmit} className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Create Pop-up Announcement
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Recipient Scope
+                    </label>
+                    <select
+                      value={popupScope}
+                      onChange={(e) => setPopupScope(e.target.value as any)}
+                      className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    >
+                      <option value="global">Global (All Classmates)</option>
+                      <option value="user">Individual (Select Student)</option>
+                    </select>
+                  </div>
+
+                  {popupScope === 'user' && (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Select Target Student
+                      </label>
+                      <select
+                        value={popupTargetUserId}
+                        onChange={(e) => setPopupTargetUserId(e.target.value)}
+                        className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        required
+                      >
+                        <option value="">-- Choose Student --</option>
+                        {users.filter((u) => u.role !== 'admin').map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} (@{u.username})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Alert Type
+                    </label>
+                    <select
+                      value={popupType}
+                      onChange={(e) => setPopupType(e.target.value as any)}
+                      className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    >
+                      <option value="info">Info Announcement</option>
+                      <option value="warning">Important Warning</option>
+                      <option value="urgent">Urgent Exam Alert</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Announcement Title <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={popupTitle}
+                    onChange={(e) => setPopupTitle(e.target.value)}
+                    placeholder="e.g. Unit 2 Chemistry Exam Moved to Friday"
+                    className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Message Body <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    value={popupMessage}
+                    onChange={(e) => setPopupMessage(e.target.value)}
+                    rows={2}
+                    placeholder="Type the message that will pop up on the student's screen upon opening the site..."
+                    className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Action Button Text (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={popupActionText}
+                      onChange={(e) => setPopupActionText(e.target.value)}
+                      placeholder="e.g. Open Study Guide"
+                      className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Action URL (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={popupActionUrl}
+                      onChange={(e) => setPopupActionUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full text-xs p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={isSubmittingPopup}
+                    className="inline-flex items-center space-x-1.5 px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isSubmittingPopup ? 'Publishing...' : 'Publish Pop-up'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Existing Popups List */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Active & Past Popups ({popups.length})
+                </h4>
+
+                {popups.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No broadcast popups created yet.</p>
+                ) : (
+                  popups.map((p) => {
+                    const targetUser = users.find((u) => u.id === p.targetUserId);
+                    return (
+                      <div
+                        key={p.id}
+                        className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                          p.active
+                            ? 'border-indigo-200 dark:border-indigo-900 bg-white dark:bg-slate-800'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 opacity-60'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                p.type === 'urgent'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : p.type === 'warning'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-indigo-100 text-indigo-800'
+                              }`}
+                            >
+                              {p.type.toUpperCase()}
+                            </span>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">
+                              {p.title}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              ({p.scope === 'global' ? 'Global' : `To: ${targetUser?.name || p.targetUserId}`})
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                            {p.message}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-2 self-end sm:self-center">
+                          <button
+                            onClick={() => onTogglePopup(p.id)}
+                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                              p.active
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                            }`}
+                          >
+                            {p.active ? 'Active' : 'Paused'}
+                          </button>
+                          <button
+                            onClick={() => onDeletePopup(p.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: Site Settings & Maintenance Mode */}
+          {activeTab === 'settings' && (
+            <form onSubmit={handleSaveSiteSettings} className="space-y-5">
+              {/* Maintenance Mode Card */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center">
+                      <ShieldAlert className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Maintenance Mode
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Locks the vault for students and shows a live countdown with custom message. Only admin can login.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={maintenanceEnabled}
+                      onChange={(e) => setMaintenanceEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Countdown Target Date & Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={maintenanceTarget}
+                      onChange={(e) => setMaintenanceTarget(e.target.value)}
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Maintenance Message to Classmates
+                    </label>
+                    <input
+                      type="text"
+                      value={maintenanceMessage}
+                      onChange={(e) => setMaintenanceMessage(e.target.value)}
+                      placeholder="e.g. StudyVault is undergoing scheduled unit restructuring. Back soon!"
+                      className="w-full text-xs p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* AI Tutor Feature Toggle */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/50 dark:bg-purple-950/20 flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      AI Study Assistant for Students
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      When deactivated, the AI Tutor is hidden and turned off for all student accounts.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={aiTutorToggle}
+                    onChange={(e) => setAiTutorToggle(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all cursor-pointer"
+                >
+                  {isSavingSettings ? 'Saving Settings...' : 'Save Site Settings'}
+                </button>
+              </div>
+            </form>
           )}
         </div>
 

@@ -1,14 +1,15 @@
-import { Clock, AlertTriangle, ArrowRight, Sparkles, BookOpen } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, AlertTriangle, ArrowRight, BookOpen, X, Sparkles } from 'lucide-react';
 import type { Course, Unit } from '../types/index.ts';
-import { getCourseColorClasses, formatTimeLeft } from '../utils/helpers.ts';
+import { formatTimeLeft } from '../utils/helpers.ts';
 
 interface UrgencyBannerProps {
   urgentCourse: Course | null;
   activeSpotlightUnit: Unit | null;
   onSelectCourse: (courseId: string) => void;
   newResourcesCount: number;
-  onFilterNewOnly: () => void;
-  isShowingNewOnly: boolean;
+  userName?: string;
+  enrolledCoursesCount: number;
 }
 
 export function UrgencyBanner({
@@ -16,83 +17,72 @@ export function UrgencyBanner({
   activeSpotlightUnit,
   onSelectCourse,
   newResourcesCount,
-  onFilterNewOnly,
-  isShowingNewOnly,
+  userName,
+  enrolledCoursesCount,
 }: UrgencyBannerProps) {
-  if (!urgentCourse) return null;
-
-  const colorStyle = getCourseColorClasses(urgentCourse.color);
-  const timeLeft = urgentCourse.nextDueDate ? formatTimeLeft(urgentCourse.nextDueDate) : '';
+  const [isDismissed, setIsDismissed] = useState(false);
 
   return (
     <div className="mb-6 space-y-3">
-      {/* Dynamic Urgency / Spotlight Card */}
-      <div className="relative overflow-hidden rounded-2xl border border-rose-300 dark:border-rose-900/60 bg-gradient-to-r from-rose-500/10 via-amber-500/5 to-transparent p-4 sm:p-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start space-x-3.5">
-            <div className="mt-0.5 flex-shrink-0 w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-md shadow-rose-500/20">
-              <AlertTriangle className="w-5 h-5 animate-pulse" />
-            </div>
-
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-rose-500 text-white shadow-xs">
-                  🔥 High Priority &bull; Upcoming {urgentCourse.urgencyType === 'exam' ? 'Exam' : 'Due Date'}
-                </span>
-                <span className="inline-flex items-center space-x-1 text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/80 px-2 py-0.5 rounded-md">
-                  <Clock className="w-3.5 h-3.5 mr-1" />
-                  <span>{timeLeft}</span>
-                </span>
-              </div>
-
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 mt-1">
-                {urgentCourse.name} ({urgentCourse.period}) — {urgentCourse.nextDueTitle}
-              </h2>
-
-              {activeSpotlightUnit && (
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Spotlight Active: <strong>{activeSpotlightUnit.title}</strong></span>
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start sm:self-center">
-            <button
-              onClick={() => onSelectCourse(urgentCourse.id)}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 rounded-xl shadow-sm transition-all cursor-pointer"
-            >
-              <span>Open Study Deck</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      {/* Personalized Welcome Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Welcome back, {userName || 'Student'} 👋
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            You have access to <strong className="text-slate-700 dark:text-slate-300">{enrolledCoursesCount} course deck{enrolledCoursesCount !== 1 ? 's' : ''}</strong>
+            {newResourcesCount > 0 && (
+              <span> &bull; <strong className="text-indigo-600 dark:text-indigo-400">{newResourcesCount} new upload{newResourcesCount !== 1 ? 's' : ''}</strong> this week</span>
+            )}
+          </p>
         </div>
       </div>
 
-      {/* "What's New Since Last Visit" notification bar */}
-      {newResourcesCount > 0 && (
-        <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 text-xs text-indigo-900 dark:text-indigo-200">
-          <div className="flex items-center space-x-2">
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-            </span>
-            <span className="font-medium">
-              <strong>{newResourcesCount} new resources</strong> uploaded this week!
-            </span>
-          </div>
-
+      {/* Dynamic Urgent Event Alert - Sleek & Dismissible */}
+      {urgentCourse && !isDismissed && (
+        <div className="relative overflow-hidden rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-gradient-to-r from-rose-500/10 via-amber-500/5 to-transparent p-3.5 sm:p-4 shadow-2xs">
           <button
-            onClick={onFilterNewOnly}
-            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
-              isShowingNewOnly
-                ? 'bg-indigo-600 text-white'
-                : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
-            }`}
+            onClick={() => setIsDismissed(true)}
+            className="absolute top-3 right-3 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+            title="Dismiss notice"
           >
-            {isShowingNewOnly ? 'Show All Items' : 'Filter New Items'}
+            <X className="w-3.5 h-3.5" />
           </button>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pr-6">
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
+                <AlertTriangle className="w-4 h-4 animate-pulse" />
+              </div>
+
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                    Next Due: {urgentCourse.nextDueDate ? formatTimeLeft(urgentCourse.nextDueDate) : 'Upcoming'}
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                    {urgentCourse.name} — {urgentCourse.nextDueTitle}
+                  </span>
+                </div>
+
+                {activeSpotlightUnit && (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Spotlight: {activeSpotlightUnit.title}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => onSelectCourse(urgentCourse.id)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 rounded-xl transition-all cursor-pointer self-start sm:self-center flex-shrink-0"
+            >
+              <span>View Deck</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       )}
     </div>

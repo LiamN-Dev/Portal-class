@@ -10,6 +10,8 @@ import type {
   UnlockRequest,
   StudentSubmission,
   NoteRequest,
+  AdminPopup,
+  SiteSettings,
 } from './src/types/index.ts';
 
 dotenv.config();
@@ -589,6 +591,37 @@ let unlockRequests: UnlockRequest[] = [...initialUnlockRequests];
 let submissions: StudentSubmission[] = [...initialSubmissions];
 let noteRequests: NoteRequest[] = [...initialNoteRequests];
 
+// Passwords store for secure credential verification
+const userPasswords: Record<string, string> = {
+  'u-admin': 'vaultadmin',
+  'u-alex': 'alex123',
+  'u-maya': 'maya123',
+  'u-liam-student': 'liams123',
+};
+
+// Global Site Settings (Maintenance Mode & AI Tutor Toggle)
+let siteSettings: SiteSettings = {
+  maintenanceMode: {
+    enabled: false,
+    countdownTarget: new Date(Date.now() + 3600 * 1000 * 2).toISOString(), // 2 hours
+    message: 'StudyVault is undergoing scheduled unit restructuring and updates. Back soon!',
+  },
+  aiTutorEnabled: false, // Deactivated by default for all accounts unless enabled by admin!
+};
+
+// Admin Popups / Broadcast Announcements (Global or Individual)
+let popups: AdminPopup[] = [
+  {
+    id: 'pop-1',
+    title: 'Welcome to StudyVault',
+    message: 'Review newly uploaded homework solution guides and exam cram sheets. If you need unit access, click any locked card to request access.',
+    type: 'info',
+    scope: 'global',
+    createdAt: new Date().toISOString(),
+    active: true,
+  },
+];
+
 // --- REST API Endpoints ---
 
 // Get complete vault state
@@ -601,10 +634,12 @@ app.get('/api/state', (_req, res) => {
     unlockRequests,
     submissions,
     noteRequests,
+    siteSettings,
+    popups,
   });
 });
 
-// Authentication / Login
+// Authentication / Login with strict credentials and Maintenance Mode gate
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   const user = users.find(
@@ -613,6 +648,16 @@ app.post('/api/auth/login', (req, res) => {
 
   if (!user) {
     return res.status(401).json({ error: 'User not found. Check username or register.' });
+  }
+
+  // Maintenance mode check: ONLY admin can log in when maintenance mode is active!
+  if (siteSettings.maintenanceMode.enabled && user.role !== 'admin') {
+    return res.status(503).json({
+      error: 'Site is under maintenance mode. Only administrators may log in.',
+      isMaintenance: true,
+      maintenanceMessage: siteSettings.maintenanceMode.message,
+      countdownTarget: siteSettings.maintenanceMode.countdownTarget,
+    });
   }
 
   if (user.status === 'suspended') {
@@ -626,6 +671,12 @@ app.post('/api/auth/login', (req, res) => {
     });
   }
 
+  // Strict Password Check
+  const expectedPassword = userPasswords[user.id] || user.temporaryPassword || 'vaultadmin';
+  if (!password || password.trim() !== expectedPassword.trim()) {
+    return res.status(401).json({ error: 'Incorrect password.' });
+  }
+
   // Update lastLogin
   user.lastLogin = new Date().toISOString();
 
@@ -637,7 +688,7 @@ app.post('/api/auth/login', (req, res) => {
 
 // Student Registration
 app.post('/api/auth/register', (req, res) => {
-  const { name, username, requestedCourses, notes, email } = req.body;
+  const { name, username, requestedCourses, notes, email, password } = req.body;
 
   if (!name || !username) {
     return res.status(400).json({ error: 'Display name and username are required.' });
@@ -664,6 +715,7 @@ app.post('/api/auth/register', (req, res) => {
   };
 
   users.push(newUser);
+  userPasswords[newUser.id] = password || 'study123';
 
   res.status(201).json({
     user: newUser,
@@ -690,6 +742,7 @@ app.post('/api/admin/users/:id/approve-request', (req, res) => {
 app.post('/api/admin/users/:id/reject-request', (req, res) => {
   const { id } = req.params;
   users = users.filter((u) => u.id !== id);
+  delete userPasswords[id];
   res.json({ success: true, message: 'Request removed.' });
 });
 
@@ -724,10 +777,51 @@ app.post('/api/admin/users/:id/reset-password', (req, res) => {
   if (!targetUser) return res.status(404).json({ error: 'User not found' });
 
   targetUser.temporaryPassword = temporaryPassword || 'study123';
+  userPasswords[targetUser.id] = targetUser.temporaryPassword || 'study123';
+
   res.json({
     user: targetUser,
     message: `Password reset. Hand "${targetUser.temporaryPassword}" to ${targetUser.name}.`,
   });
+});
+
+// Site Settings (Maintenance Mode & AI Tutor Toggle)
+app.post('/api/admin/settings', (req, res) => {
+  const { maintenanceMode, aiTutorEnabled } = req.body;
+  if (maintenanceMode !== undefined) {
+    siteSettings.maintenanceMode = {
+      ...siteSettings.maintenanceMode,
+      ...maintenanceMode,
+    };
+  }
+  if (aiTutorEnabled !== undefined) {
+    siteSettings.aiTutorEnabled = !!aiTutorEnabled;
+  }
+  res.json({ siteSettings });
+});
+
+// Admin Popups / Announcements
+app.post('/api/admin/popups', (req, res) => {
+  const popupData = req.body as AdminPopup;
+  popupData.id = `pop-${Date.now()}`;
+  popupData.createdAt = new Date().toISOString();
+  popupData.active = true;
+  popups.unshift(popupData);
+  res.status(201).json({ popup: popupData });
+});
+
+app.post('/api/admin/popups/:id/toggle', (req, res) => {
+  const { id } = req.params;
+  const p = popups.find((x) => x.id === id);
+  if (!p) return res.status(404).json({ error: 'Popup not found' });
+  p.active = !p.active;
+  res.json({ popup: p });
+});
+
+app.delete('/api/admin/popups/:id', (req, res) => {
+  const { id } = req.params;
+  popups = popups.filter((x) => x.id !== id);
+  res.json({ success: true });
 });
 
 // Course Creation / Update
@@ -744,6 +838,35 @@ app.post('/api/courses', (req, res) => {
   res.json({ course: courseData });
 });
 
+// Course Delete (also cleans up associated units and resources)
+app.delete('/api/courses/:id', (req, res) => {
+  const { id } = req.params;
+  courses = courses.filter((c) => c.id !== id);
+  units = units.filter((u) => u.courseId !== id);
+  resources = resources.filter((r) => r.courseId !== id);
+  // Also remove from enrolled course arrays
+  users.forEach((u) => {
+    u.enrolledCourseIds = u.enrolledCourseIds.filter((cid) => cid !== id);
+  });
+  res.json({ success: true });
+});
+
+// Course Reorder
+app.post('/api/courses/reorder', (req, res) => {
+  const { courseIds } = req.body as { courseIds: string[] };
+  if (!Array.isArray(courseIds)) return res.status(400).json({ error: 'Invalid courseIds' });
+  const ordered: Course[] = [];
+  courseIds.forEach((id) => {
+    const c = courses.find((x) => x.id === id);
+    if (c) ordered.push(c);
+  });
+  courses.forEach((c) => {
+    if (!ordered.some((x) => x.id === c.id)) ordered.push(c);
+  });
+  courses = ordered;
+  res.json({ courses });
+});
+
 // Unit Creation / Update
 app.post('/api/units', (req, res) => {
   const unitData = req.body as Unit;
@@ -756,6 +879,53 @@ app.post('/api/units', (req, res) => {
     else units.push(unitData);
   }
   res.json({ unit: unitData });
+});
+
+// Unit Delete
+app.delete('/api/units/:id', (req, res) => {
+  const { id } = req.params;
+  units = units.filter((u) => u.id !== id);
+  resources = resources.filter((r) => r.unitId !== id);
+  res.json({ success: true });
+});
+
+// Unit Reorder
+app.post('/api/units/reorder', (req, res) => {
+  const { unitId, direction } = req.body;
+  const unit = units.find((u) => u.id === unitId);
+  if (!unit) return res.status(404).json({ error: 'Unit not found' });
+
+  const courseUnits = units
+    .filter((u) => u.courseId === unit.courseId)
+    .sort((a, b) => a.order - b.order);
+  const idx = courseUnits.findIndex((u) => u.id === unitId);
+
+  if (direction === 'up' && idx > 0) {
+    const prev = courseUnits[idx - 1];
+    const tempOrder = prev.order;
+    prev.order = unit.order;
+    unit.order = tempOrder;
+  } else if (direction === 'down' && idx < courseUnits.length - 1) {
+    const next = courseUnits[idx + 1];
+    const tempOrder = next.order;
+    next.order = unit.order;
+    unit.order = tempOrder;
+  }
+
+  res.json({ units });
+});
+
+// Resource Move to another Unit
+app.post('/api/resources/:id/move', (req, res) => {
+  const { id } = req.params;
+  const { newUnitId } = req.body;
+  const item = resources.find((r) => r.id === id);
+  if (!item) return res.status(404).json({ error: 'Resource not found' });
+  const unit = units.find((u) => u.id === newUnitId);
+  if (!unit) return res.status(404).json({ error: 'Target unit not found' });
+  item.unitId = newUnitId;
+  item.courseId = unit.courseId;
+  res.json({ resource: item });
 });
 
 // Resource Creation / Update
@@ -921,7 +1091,14 @@ app.post('/api/notes-requests/:id/fulfill', (req, res) => {
 // 1. Multi-turn AI Study Assistant Chatbot
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, courseContext, speedPreference, enableHighThinking, systemRole } = req.body;
+    const { messages, courseContext, speedPreference, enableHighThinking, systemRole, userRole } = req.body;
+
+    // Check if AI Tutor is enabled by admin
+    if (!siteSettings.aiTutorEnabled && userRole !== 'admin') {
+      return res.status(403).json({
+        error: 'AI Tutor is currently deactivated for all accounts by the administrator.',
+      });
+    }
 
     // Model selection based on user instructions:
     // - gemini-3.1-pro-preview for particularly complex tasks & high thinking
@@ -1002,7 +1179,14 @@ Guidelines:
 // 2. Homework / Study Notes Image Understanding (gemini-3.1-pro-preview)
 app.post('/api/analyze-image', async (req, res) => {
   try {
-    const { imageBase64, mimeType, prompt, courseContext } = req.body;
+    const { imageBase64, mimeType, prompt, courseContext, userRole } = req.body;
+
+    // Check if AI Tutor is enabled by admin
+    if (!siteSettings.aiTutorEnabled && userRole !== 'admin') {
+      return res.status(403).json({
+        error: 'AI Tutor is currently deactivated for all accounts by the administrator.',
+      });
+    }
 
     if (!imageBase64) {
       return res.status(400).json({ error: 'No image data provided' });
