@@ -1,0 +1,6 @@
+{
+  "name": "StudyVault - ClassDeck & Academic Resource Hub",
+  "description": "School class groupings, completed homework keys, study guides, granular vault permissions, dynamic urgency feed, and AI peer study assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
