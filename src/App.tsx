@@ -17,6 +17,7 @@ import type {
   NoteRequest,
   AdminPopup,
   SiteSettings,
+  VisibilityScope,
 } from './types/index.ts';
 
 // Components
@@ -237,10 +238,54 @@ export default function App() {
     await fetchState();
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('studyvault_logged_in_user');
+    sessionStorage.clear();
     setCurrentUser(null);
     setImpersonatingUser(null);
-    localStorage.removeItem('studyvault_logged_in_user');
+  };
+
+  const handleToggleUserAI = async (userId: string) => {
+    await fetch(`/api/admin/users/${userId}/toggle-ai`, { method: 'POST' });
+    await fetchState();
+  };
+
+  const handleToggleAllAI = async (enabled: boolean) => {
+    await fetch('/api/admin/users/toggle-ai-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    await fetchState();
+  };
+
+  const handleCleanSlate = async () => {
+    const res = await fetch('/api/admin/clean-slate', { method: 'POST' });
+    if (res.ok) {
+      await fetchState();
+      setSelectedCourseId('');
+    }
+  };
+
+  const handleResetDemo = async () => {
+    const res = await fetch('/api/admin/reset-demo', { method: 'POST' });
+    if (res.ok) {
+      await fetchState();
+    }
+  };
+
+  const handleUpdateResourceVisibility = async (resourceId: string, scope: VisibilityScope) => {
+    await fetch(`/api/resources/${resourceId}/visibility`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibilityScope: scope }),
+    });
+    await fetchState();
   };
 
   // Admin Queue Approvals
@@ -550,6 +595,11 @@ export default function App() {
           newResourcesCount={newResourcesCount}
           userName={effectiveUser?.name || 'Student'}
           enrolledCoursesCount={visibleCourses.length}
+          isAdmin={isAdmin}
+          onAddCourse={() => {
+            setCourseToEdit(null);
+            setIsCourseModalOpen(true);
+          }}
         />
 
         {/* Course Tabs (with reordering and admin controls) */}
@@ -602,6 +652,7 @@ export default function App() {
             }}
             onDeleteResource={handleDeleteResource}
             onMoveResource={handleMoveResource}
+            onUpdateResourceVisibility={handleUpdateResourceVisibility}
             filterNewOnly={filterNewOnly}
           />
         ) : (
@@ -711,6 +762,10 @@ export default function App() {
         onTogglePopup={handleTogglePopup}
         onDeletePopup={handleDeletePopup}
         onUpdateSiteSettings={handleUpdateSiteSettings}
+        onToggleUserAI={handleToggleUserAI}
+        onToggleAllAI={handleToggleAllAI}
+        onCleanSlate={handleCleanSlate}
+        onResetDemo={handleResetDemo}
       />
 
       {/* Student Submit Study Guide Modal */}
@@ -739,6 +794,7 @@ export default function App() {
         isOpen={isAIOpen}
         onClose={() => setIsAIOpen(false)}
         activeCourse={activeCourse}
+        currentUser={effectiveUser}
       />
 
       {/* Backup Export Modal */}

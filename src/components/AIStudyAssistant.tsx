@@ -15,18 +15,20 @@ import {
   Minimize2,
   Maximize2,
 } from 'lucide-react';
-import type { ChatMessage, Course } from '../types/index.ts';
+import type { ChatMessage, Course, User } from '../types/index.ts';
 
 interface AIStudyAssistantProps {
   isOpen: boolean;
   onClose: () => void;
   activeCourse: Course | null;
+  currentUser?: User | null;
 }
 
 export function AIStudyAssistant({
   isOpen,
   onClose,
   activeCourse,
+  currentUser,
 }: AIStudyAssistantProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -102,6 +104,8 @@ export function AIStudyAssistant({
             mimeType: imageMimeType,
             prompt: userText || 'Carefully analyze this homework problem or study notes image. Provide step-by-step guidance.',
             courseContext: activeCourse ? `${activeCourse.name} - ${activeCourse.description}` : 'General High School',
+            userId: currentUser?.id,
+            userRole: currentUser?.role,
           }),
         });
 
@@ -129,6 +133,8 @@ export function AIStudyAssistant({
             speedPreference,
             enableHighThinking,
             systemRole,
+            userId: currentUser?.id,
+            userRole: currentUser?.role,
           }),
         });
 

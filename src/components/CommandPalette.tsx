@@ -103,7 +103,7 @@ export function CommandPalette({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search all units, problem sets, formulas, or lecture slides..."
+            placeholder="Search study materials, HW keys, notes..."
             className="w-full bg-transparent text-sm sm:text-base font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
             autoFocus
           />

@@ -70,6 +70,10 @@ interface AdminQueueModalProps {
   onTogglePopup: (id: string) => Promise<void>;
   onDeletePopup: (id: string) => Promise<void>;
   onUpdateSiteSettings: (settings: Partial<SiteSettings>) => Promise<void>;
+  onToggleUserAI?: (userId: string) => Promise<void>;
+  onToggleAllAI?: (enabled: boolean) => Promise<void>;
+  onCleanSlate?: () => Promise<void>;
+  onResetDemo?: () => Promise<void>;
 }
 
 export function AdminQueueModal({
@@ -93,6 +97,10 @@ export function AdminQueueModal({
   onTogglePopup,
   onDeletePopup,
   onUpdateSiteSettings,
+  onToggleUserAI,
+  onToggleAllAI,
+  onCleanSlate,
+  onResetDemo,
 }: AdminQueueModalProps) {
   const [activeTab, setActiveTab] = useState<
     'accounts' | 'unlocks' | 'submissions' | 'user_matrix' | 'popups' | 'settings'
@@ -596,10 +604,29 @@ export function AdminQueueModal({
           {/* TAB 4: User Matrix */}
           {activeTab === 'user_matrix' && (
             <div className="space-y-4">
-              <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
-                <span className="font-bold">Course Checkbox Matrix:</span> Check or uncheck
-                boxes to instantly grant or revoke access to entire classes for any classmate. Toggle the
-                lock switch to suspend an account if needed.
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
+                <div>
+                  <span className="font-bold">Course Checkbox Matrix & AI Permissions:</span> Check or uncheck
+                  boxes to instantly grant or revoke access to classes and AI peer tutor.
+                </div>
+                {onToggleAllAI && (
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onToggleAllAI(true)}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Enable AI for All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleAllAI(false)}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Turn Off AI for All
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -608,6 +635,7 @@ export function AdminQueueModal({
                     <tr>
                       <th className="p-3">Classmate</th>
                       <th className="p-3">Status</th>
+                      <th className="p-3 text-center">AI Tutor</th>
                       {courses.map((c) => (
                         <th key={c.id} className="p-3 text-center">
                           <div>{c.code}</div>
@@ -653,6 +681,29 @@ export function AdminQueueModal({
                             >
                               {u.status}
                             </span>
+                          </td>
+
+                          {/* AI Tutor Toggle per user */}
+                          <td className="p-3 text-center">
+                            {u.role === 'admin' ? (
+                              <span className="text-[10px] font-bold text-purple-600 bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded-full">
+                                Admin
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => onToggleUserAI?.(u.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center space-x-1 ${
+                                  u.aiTutorEnabled
+                                    ? 'bg-purple-600 text-white shadow-xs hover:bg-purple-700'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                                title={u.aiTutorEnabled ? 'AI Tutor is enabled for this user' : 'AI Tutor is deactivated (click to enable)'}
+                              >
+                                <Sparkles className="w-3 h-3" />
+                                <span>{u.aiTutorEnabled ? 'Active' : 'Off'}</span>
+                              </button>
+                            )}
                           </td>
 
                           {/* Checkboxes for courses */}
@@ -1025,10 +1076,10 @@ export function AdminQueueModal({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                      AI Study Assistant for Students
+                      Global AI Study Assistant Toggle
                     </h4>
                     <p className="text-xs text-slate-500">
-                      When deactivated, the AI Tutor is hidden and turned off for all student accounts.
+                      When off, student accounts cannot access AI unless explicitly enabled in the User Matrix.
                     </p>
                   </div>
                 </div>
@@ -1042,6 +1093,57 @@ export function AdminQueueModal({
                   />
                   <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                 </label>
+              </div>
+
+              {/* Data Persistence & Clean Slate */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                      <span>Disk Persistence & Real Courses Setup</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                        Auto-Saved
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Your database is saved directly to disk (<code className="font-mono text-indigo-500">data/studyvault-db.json</code>) so no accounts or real materials are lost across server updates.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  {onCleanSlate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            'Are you sure you want to start with a Clean Slate? This will wipe the demo courses and files so you can create your real classes. Your admin login stays active!'
+                          )
+                        ) {
+                          onCleanSlate();
+                        }
+                      }}
+                      className="px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-all cursor-pointer shadow-xs"
+                    >
+                      Start Clean Slate (Clear Demo Data)
+                    </button>
+                  )}
+
+                  {onResetDemo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Reload the starter template demo data?')) {
+                          onResetDemo();
+                        }
+                      }}
+                      className="px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                    >
+                      Reload Demo Template
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end pt-2">

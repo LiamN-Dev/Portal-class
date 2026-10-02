@@ -14,11 +14,12 @@ export interface User {
   lastLogin?: string;
   requestedCourses?: string[];
   notes?: string;
+  aiTutorEnabled?: boolean;
 }
 
 export type ResourceType = 'doc' | 'pdf' | 'quizlet' | 'slides' | 'video' | 'sheets' | 'notion' | 'code' | 'link';
 export type ResourceCategory = 'completed_hw' | 'study_guide' | 'lecture_notes' | 'lab_report' | 'practice_exam' | 'formula_sheet';
-export type VisibilityScope = 'all_enrolled' | 'restricted_students' | 'admin_only';
+export type VisibilityScope = 'all_enrolled' | 'hidden' | 'draft' | 'restricted_students' | 'time_locked';
 
 export interface Course {
   id: string;

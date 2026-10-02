@@ -1,0 +1,43 @@
+{
+  "courses": [],
+  "units": [],
+  "resources": [],
+  "users": [
+    {
+      "id": "u-admin",
+      "name": "Liam Nystrom",
+      "username": "admin",
+      "role": "admin",
+      "status": "approved",
+      "enrolledCourseIds": [],
+      "email": "liamnystrom9@gmail.com",
+      "joinedAt": "2026-10-01T00:00:00.000Z",
+      "notes": "System Administrator"
+    }
+  ],
+  "userPasswords": {
+    "u-admin": "vaultadmin"
+  },
+  "unlockRequests": [],
+  "submissions": [],
+  "noteRequests": [],
+  "siteSettings": {
+    "maintenanceMode": {
+      "enabled": false,
+      "countdownTarget": "2026-10-02T16:00:00.000Z",
+      "message": "StudyVault is undergoing scheduled unit restructuring and updates. Back soon!"
+    },
+    "aiTutorEnabled": false
+  },
+  "popups": [
+    {
+      "id": "pop-clean-welcome",
+      "title": "Welcome to your Clean Slate StudyVault! 🚀",
+      "message": "You have a fresh, organized workspace ready for your real classes. Click \"+ Add Course\" to create your first course deck and start uploading real homework keys and study materials!",
+      "type": "info",
+      "scope": "global",
+      "createdAt": "2026-10-02T04:52:00.000Z",
+      "active": true
+    }
+  ]
+}

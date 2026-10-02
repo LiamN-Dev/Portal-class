@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Folder,
   FolderOpen,
@@ -19,9 +20,11 @@ import {
   Edit2,
   Info,
   ArrowUpDown,
-  MoveRight,
+  EyeOff,
+  FileText,
+  Globe,
 } from 'lucide-react';
-import type { Course, Unit, ResourceItem, User } from '../types/index.ts';
+import type { Course, Unit, ResourceItem, User, VisibilityScope } from '../types/index.ts';
 import {
   getCourseColorClasses,
   getResourceTypeConfig,
@@ -44,6 +47,7 @@ interface UnitAccordionProps {
   onEditResource?: (resource: ResourceItem) => void;
   onDeleteResource: (resourceId: string) => void;
   onMoveResource?: (resourceId: string, newUnitId: string) => void;
+  onUpdateResourceVisibility?: (resourceId: string, scope: VisibilityScope) => void;
   filterNewOnly?: boolean;
 }
 
@@ -62,12 +66,10 @@ export function UnitAccordion({
   onEditResource,
   onDeleteResource,
   onMoveResource,
+  onUpdateResourceVisibility,
   filterNewOnly,
 }: UnitAccordionProps) {
-  // Category filter inside active course
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
-
-  // By default expand units that are spotlighted or active
   const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     units.forEach((u) => {
@@ -79,6 +81,7 @@ export function UnitAccordion({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedSnippets, setExpandedSnippets] = useState<Record<string, boolean>>({});
   const [movingResourceId, setMovingResourceId] = useState<string | null>(null);
+  const [visibilityDropdownId, setVisibilityDropdownId] = useState<string | null>(null);
 
   const colorStyle = getCourseColorClasses(course.color);
 
@@ -98,54 +101,104 @@ export function UnitAccordion({
     setExpandedSnippets((prev) => ({ ...prev, [resId]: !prev[resId] }));
   };
 
-  // Determine if a resource is locked for the current student
-  const isResourceLocked = (res: ResourceItem): { locked: boolean; reason?: string } => {
-    if (isAdmin) return { locked: false };
+  // Check locking / hiding logic
+  const checkResourceAccess = (res: ResourceItem): { isHidden: boolean; isLocked: boolean; reason?: string } => {
+    if (isAdmin) return { isHidden: false, isLocked: false };
 
-    // 1. Admin only draft
-    if (res.visibilityScope === 'admin_only') {
-      return { locked: true, reason: 'Admin Draft Only (Hidden from Class)' };
+    // 1. Hidden mode - completely invisible to students
+    if (res.visibilityScope === 'hidden') {
+      return { isHidden: true, isLocked: true, reason: 'Hidden' };
     }
 
-    // 2. Restricted to specific students (e.g. lab group or peer tutoring)
+    // 2. Draft mode - admin only
+    if (res.visibilityScope === 'draft') {
+      return { isHidden: true, isLocked: true, reason: 'Draft' };
+    }
+
+    // 3. Restricted working group
     if (res.visibilityScope === 'restricted_students') {
       const allowed = res.allowedStudentIds || [];
       if (!currentUser || !allowed.includes(currentUser.id)) {
         return {
-          locked: true,
-          reason: 'Restricted Working Group (Lab Group or Peer Tutoring)',
+          isHidden: false,
+          isLocked: true,
+          reason: 'Restricted Working Group (Request access from author)',
         };
       }
     }
 
-    // 3. Time-locked scheduled unlock
-    if (res.scheduledUnlockAt) {
-      const unlockTime = new Date(res.scheduledUnlockAt).getTime();
-      if (Date.now() < unlockTime) {
-        return {
-          locked: true,
-          reason: `Scheduled Lock (Reveals ${new Date(res.scheduledUnlockAt).toLocaleString([], {
+    // 4. Time-locked scheduled reveal
+    if (res.visibilityScope === 'time_locked' || res.scheduledUnlockAt) {
+      if (res.scheduledUnlockAt) {
+        const unlockTime = new Date(res.scheduledUnlockAt).getTime();
+        if (Date.now() < unlockTime) {
+          const formatted = new Date(res.scheduledUnlockAt).toLocaleString([], {
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
-          })})`,
-        };
+          });
+          return {
+            isHidden: false,
+            isLocked: true,
+            reason: `Locked until ${formatted}`,
+          };
+        }
+      }
+      if (res.autoLockAt) {
+        const lockTime = new Date(res.autoLockAt).getTime();
+        if (Date.now() > lockTime) {
+          return {
+            isHidden: false,
+            isLocked: true,
+            reason: 'Post-deadline lock expired',
+          };
+        }
       }
     }
 
-    // 4. Auto-lock after deadline
-    if (res.autoLockAt) {
-      const lockTime = new Date(res.autoLockAt).getTime();
-      if (Date.now() > lockTime) {
+    return { isHidden: false, isLocked: false };
+  };
+
+  const getVisibilityBadge = (scope: VisibilityScope = 'all_enrolled') => {
+    switch (scope) {
+      case 'all_enrolled':
         return {
-          locked: true,
-          reason: 'Post-Deadline Auto-Locked (Request unlock to review)',
+          label: 'Everyone',
+          icon: Globe,
+          className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
         };
-      }
+      case 'hidden':
+        return {
+          label: 'Hidden',
+          icon: EyeOff,
+          className: 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700',
+        };
+      case 'time_locked':
+        return {
+          label: 'Time Lock',
+          icon: Clock,
+          className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300 dark:border-amber-800',
+        };
+      case 'restricted_students':
+        return {
+          label: 'Restricted',
+          icon: Users,
+          className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800',
+        };
+      case 'draft':
+        return {
+          label: 'Draft',
+          icon: FileText,
+          className: 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+        };
+      default:
+        return {
+          label: 'Everyone',
+          icon: Globe,
+          className: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300',
+        };
     }
-
-    return { locked: false };
   };
 
   return (
@@ -180,25 +233,26 @@ export function UnitAccordion({
                 className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Unit</span>
+                <span>+ Add Unit</span>
               </button>
             )}
           </div>
         </div>
 
         {/* In-Course Category Filters */}
-        <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center space-x-2 text-xs overflow-x-auto">
-          <span className="text-slate-400 font-semibold text-[11px]">View:</span>
+        <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center space-x-2 text-xs overflow-x-auto pb-1">
+          <span className="text-slate-400 font-semibold text-[11px]">Filter:</span>
           {[
-            { id: 'all', label: 'All Units & Items' },
-            { id: 'completed_hw', label: '✓ Completed HW Keys' },
+            { id: 'all', label: 'All Materials' },
+            { id: 'completed_hw', label: '✓ Completed HW' },
             { id: 'study_guide', label: 'Study Guides' },
+            { id: 'lecture_notes', label: 'Lecture Notes' },
             { id: 'practice_exam', label: 'Practice Exams' },
           ].map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategoryFilter(cat.id)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeCategoryFilter === cat.id
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
                   : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-white'
@@ -221,7 +275,7 @@ export function UnitAccordion({
             {isAdmin && (
               <button
                 onClick={onAddUnit}
-                className="mt-3 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl"
+                className="mt-3 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer"
               >
                 + Create Unit 1
               </button>
@@ -233,6 +287,14 @@ export function UnitAccordion({
             const isUnitLocked = unit.status === 'locked' && !isAdmin;
 
             let unitResources = resources.filter((r) => r.unitId === unit.id);
+
+            // Filter out hidden/draft if student
+            if (!isAdmin) {
+              unitResources = unitResources.filter((r) => {
+                const acc = checkResourceAccess(r);
+                return !acc.isHidden;
+              });
+            }
 
             // Filter by activeCategoryFilter
             if (activeCategoryFilter === 'completed_hw') {
@@ -266,9 +328,9 @@ export function UnitAccordion({
                       : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/50'
                   }`}
                 >
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-3 min-w-0">
                     <button
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex-shrink-0"
                       disabled={isUnitLocked}
                     >
                       {isUnitLocked ? (
@@ -280,82 +342,77 @@ export function UnitAccordion({
                       )}
                     </button>
 
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    <div className="min-w-0 truncate">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
                           {unit.title}
-                        </h3>
-
-                        {unit.isActiveSpotlight && (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-indigo-500 text-white shadow-2xs">
-                            <Sparkles className="w-3 h-3 text-amber-300" />
-                            <span>Active Spotlight</span>
-                          </span>
-                        )}
-
-                        {unit.status === 'locked' && (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                            <Lock className="w-3 h-3" />
-                            <span>
-                              Locked{' '}
-                              {unit.unlockAt
-                                ? `until ${new Date(unit.unlockAt).toLocaleDateString([], {
-                                    month: 'short',
-                                    day: 'numeric',
-                                  })}`
-                                : ''}
-                            </span>
-                          </span>
-                        )}
-
-                        <span className="text-[11px] font-medium text-slate-400">
-                          {unitResources.length} items
                         </span>
+                        {unit.isActiveSpotlight && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex-shrink-0">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>Spotlight</span>
+                          </span>
+                        )}
+                        {unit.status === 'locked' && (
+                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center space-x-1 flex-shrink-0">
+                            <Lock className="w-3 h-3" />
+                            <span>Locked</span>
+                          </span>
+                        )}
                       </div>
-
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
-                        {unit.description}
-                      </p>
+                      {unit.description && (
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {unit.description}
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
-                    {/* Admin Unit Reorder / Edit / Delete */}
+                  <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                    <span className="text-xs font-semibold text-slate-400 hidden sm:inline">
+                      {unitResources.length} items
+                    </span>
+
+                    {/* Admin Unit Management Buttons */}
                     {isAdmin && (
                       <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
-                        {unitIdx > 0 && onReorderUnit && (
-                          <button
-                            onClick={() => onReorderUnit(unit.id, 'up')}
-                            className="p-1 text-slate-400 hover:text-indigo-600 rounded"
-                            title="Move Unit Up"
-                          >
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
+                        {onReorderUnit && (
+                          <div className="flex items-center space-x-0.5">
+                            <button
+                              disabled={unitIdx === 0}
+                              onClick={() => onReorderUnit(unit.id, 'up')}
+                              className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-30 rounded cursor-pointer"
+                              title="Move Unit Up"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              disabled={unitIdx === units.length - 1}
+                              onClick={() => onReorderUnit(unit.id, 'down')}
+                              className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-30 rounded cursor-pointer"
+                              title="Move Unit Down"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </div>
                         )}
-                        {unitIdx < units.length - 1 && onReorderUnit && (
-                          <button
-                            onClick={() => onReorderUnit(unit.id, 'down')}
-                            className="p-1 text-slate-400 hover:text-indigo-600 rounded"
-                            title="Move Unit Down"
-                          >
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-                        )}
+
                         <button
                           onClick={() => onEditUnit(unit)}
-                          className="p-1 text-slate-400 hover:text-indigo-600 rounded"
+                          className="p-1 text-slate-400 hover:text-indigo-600 rounded cursor-pointer"
                           title="Edit Unit"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
+
                         {onDeleteUnit && (
                           <button
                             onClick={() => {
-                              if (confirm(`Delete ${unit.title} and its resources?`)) {
+                              if (confirm(`Delete unit "${unit.title}" and its materials?`)) {
                                 onDeleteUnit(unit.id);
                               }
                             }}
-                            className="p-1 text-slate-400 hover:text-rose-500 rounded"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
                             title="Delete Unit"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -367,35 +424,37 @@ export function UnitAccordion({
                     {!isUnitLocked && (
                       <div className="p-1 text-slate-400">
                         {isExpanded ? (
-                          <ChevronDown className="w-5 h-5" />
+                          <ChevronDown className="w-4 h-4" />
                         ) : (
-                          <ChevronRight className="w-5 h-5" />
+                          <ChevronRight className="w-4 h-4" />
                         )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Unit Content Items */}
+                {/* Expanded Resource Cards */}
                 {isExpanded && !isUnitLocked && (
                   <div className="border-t border-slate-100 dark:border-slate-800 p-3 sm:p-4 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/40">
                     {unitResources.length === 0 ? (
                       <div className="text-center py-6 text-xs text-slate-500">
-                        No materials posted under this filter yet.
+                        No materials posted in this unit yet.
                       </div>
                     ) : (
                       unitResources.map((item) => {
                         const typeConfig = getResourceTypeConfig(item.type);
                         const categoryBadge = getCategoryBadge(item.category);
                         const TypeIcon = typeConfig.icon;
-                        const lockState = isResourceLocked(item);
+                        const access = checkResourceAccess(item);
+                        const visBadge = getVisibilityBadge(item.visibilityScope);
+                        const VisIcon = visBadge.icon;
 
-                        // Padlock Card if locked
-                        if (lockState.locked) {
+                        // Padlock Card if locked for student
+                        if (access.isLocked && !isAdmin) {
                           return (
                             <div
                               key={item.id}
-                              className="rounded-2xl border border-amber-300 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/30 p-3.5 transition-all"
+                              className="rounded-2xl border border-amber-300 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/30 p-3.5 transition-all"
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div className="flex items-start space-x-3">
@@ -409,7 +468,7 @@ export function UnitAccordion({
                                         🔒 Locked Resource
                                       </span>
                                       <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                        {lockState.reason}
+                                        {access.reason}
                                       </span>
                                     </div>
 
@@ -431,7 +490,7 @@ export function UnitAccordion({
                           );
                         }
 
-                        // Normal Unlocked Item Card
+                        // Normal Item Card (or Admin View)
                         return (
                           <div
                             key={item.id}
@@ -465,17 +524,66 @@ export function UnitAccordion({
                                       {typeConfig.label}
                                     </span>
 
-                                    {item.visibilityScope === 'restricted_students' && (
-                                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 flex items-center space-x-1">
-                                        <Users className="w-2.5 h-2.5 mr-1" />
-                                        <span>Working Group</span>
-                                      </span>
-                                    )}
+                                    {/* Admin Quick Visibility Switcher */}
+                                    {isAdmin ? (
+                                      <div className="relative">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setVisibilityDropdownId(
+                                              visibilityDropdownId === item.id ? null : item.id
+                                            )
+                                          }
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center space-x-1 cursor-pointer transition-all hover:scale-105 ${visBadge.className}`}
+                                          title="Click to switch visibility mode"
+                                        >
+                                          <VisIcon className="w-2.5 h-2.5" />
+                                          <span>{visBadge.label}</span>
+                                          <ChevronDown className="w-2.5 h-2.5" />
+                                        </button>
 
-                                    {item.visibilityScope === 'admin_only' && (
-                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200">
-                                        Draft
-                                      </span>
+                                        {visibilityDropdownId === item.id && (
+                                          <div
+                                            className="absolute left-0 mt-1 w-44 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-1 z-30 animate-in fade-in zoom-in-95"
+                                            onMouseLeave={() => setVisibilityDropdownId(null)}
+                                          >
+                                            <p className="text-[9px] font-bold text-slate-400 px-2 py-1 uppercase">
+                                              Switch Visibility:
+                                            </p>
+                                            {(
+                                              [
+                                                { scope: 'all_enrolled', label: 'Everyone', icon: Globe },
+                                                { scope: 'hidden', label: 'Hidden (No one)', icon: EyeOff },
+                                                { scope: 'time_locked', label: 'Time Locked', icon: Clock },
+                                                { scope: 'restricted_students', label: 'Restricted', icon: Users },
+                                                { scope: 'draft', label: 'Draft Mode', icon: FileText },
+                                              ] as const
+                                            ).map((opt) => (
+                                              <button
+                                                key={opt.scope}
+                                                type="button"
+                                                onClick={() => {
+                                                  onUpdateResourceVisibility?.(item.id, opt.scope);
+                                                  setVisibilityDropdownId(null);
+                                                }}
+                                                className={`w-full text-left px-2 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer ${
+                                                  item.visibilityScope === opt.scope ? 'font-bold text-indigo-600' : 'text-slate-700 dark:text-slate-300'
+                                                }`}
+                                              >
+                                                <opt.icon className="w-3.5 h-3.5 text-slate-400" />
+                                                <span>{opt.label}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      item.visibilityScope === 'restricted_students' && (
+                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 flex items-center space-x-1">
+                                          <Users className="w-2.5 h-2.5 mr-1" />
+                                          <span>Working Group</span>
+                                        </span>
+                                      )
                                     )}
 
                                     <span className="text-[11px] text-slate-400 ml-auto sm:ml-0 flex items-center gap-1">
@@ -531,7 +639,7 @@ export function UnitAccordion({
                                   title="Copy link to clipboard"
                                 >
                                   {copiedId === item.id ? (
-                                    <Check className="w-3.5 h-3.5 animate-scale" />
+                                    <Check className="w-3.5 h-3.5" />
                                   ) : (
                                     <Copy className="w-3.5 h-3.5" />
                                   )}
@@ -622,7 +730,7 @@ export function UnitAccordion({
                     {isAdmin && (
                       <button
                         onClick={() => onAddResource(unit.id)}
-                        className="w-full py-2 border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer bg-white/40 dark:bg-slate-900/40"
+                        className="w-full py-2.5 border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer bg-white/40 dark:bg-slate-900/40"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Post Material or Key to {unit.title}</span>

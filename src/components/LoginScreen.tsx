@@ -210,6 +210,19 @@ export function LoginScreen({
                 >
                   {isLoading ? 'Signing In...' : 'Sign In to StudyVault'}
                 </button>
+
+                <div className="pt-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUsername('admin');
+                      setPassword('vaultadmin');
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                  >
+                    Admin Account Login (admin)
+                  </button>
+                </div>
               </form>
             ) : (
               /* Request Access Form */

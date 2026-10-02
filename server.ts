@@ -1,6 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import type {
   Course,
@@ -31,7 +33,7 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Seed Data
+// Seed Data definition for starter or template loading
 const initialCourses: Course[] = [
   {
     id: 'c-chem',
@@ -93,31 +95,15 @@ const initialCourses: Course[] = [
     nextDueTitle: 'Recursive Grid Search & Backtracking Lab',
     urgencyType: 'lab',
   },
-  {
-    id: 'c-history',
-    name: 'AP United States History',
-    code: 'HIST-305',
-    period: 'Period 6',
-    teacher: 'Mrs. Gallagher',
-    color: 'amber',
-    accentHex: '#f59e0b',
-    icon: 'Landmark',
-    room: 'Hum-205',
-    description: 'Colonization through modern era, DBQs, LEQs, historical context, and thematic argumentations.',
-    nextDueDate: '2026-10-08T11:00:00.000Z',
-    nextDueTitle: 'Period 3 DBQ: Revolutionary Sentiment Essay',
-    urgencyType: 'assignment',
-  },
 ];
 
 const initialUnits: Unit[] = [
-  // Chemistry Units
   {
     id: 'u-chem-1',
     courseId: 'c-chem',
     unitNumber: 1,
-    title: 'Unit 1: Atomic Structure & Periodicity',
-    description: 'Electron configurations, Coulombic forces, photoelectron spectroscopy (PES), and periodic trends.',
+    title: 'Unit 1: Atomic Structure & Intermolecular Forces',
+    description: 'Electron configurations, periodic trends, Coulombic attractions, and dipole attractions.',
     status: 'unlocked',
     order: 1,
   },
@@ -125,8 +111,8 @@ const initialUnits: Unit[] = [
     id: 'u-chem-2',
     courseId: 'c-chem',
     unitNumber: 2,
-    title: 'Unit 2: Chemical Reactions & Kinetics',
-    description: 'Rate laws, collision theory, activation energy, catalysis, and reaction mechanisms.',
+    title: 'Unit 2: Chemical Kinetics & Rate Laws',
+    description: 'Differential rate laws, integrated rate laws, half-life mechanics, and reaction mechanisms.',
     status: 'unlocked',
     isActiveSpotlight: true,
     order: 2,
@@ -135,14 +121,12 @@ const initialUnits: Unit[] = [
     id: 'u-chem-3',
     courseId: 'c-chem',
     unitNumber: 3,
-    title: 'Unit 3: Thermodynamics & Electrochemistry',
-    description: 'Enthalpy, entropy, Gibbs free energy, galvanic cells, and Nernst equation.',
+    title: 'Unit 3: Chemical Equilibrium & Le Chatelier',
+    description: 'Equilibrium expressions (Kc, Kp), reaction quotient Q vs K, and solubility equilibrium.',
     status: 'locked',
-    unlockAt: '2026-10-15T08:00:00.000Z',
+    unlockAt: '2026-10-02T16:00:00.000Z',
     order: 3,
   },
-
-  // Calculus Units
   {
     id: 'u-calc-1',
     courseId: 'c-calc',
@@ -156,20 +140,18 @@ const initialUnits: Unit[] = [
     id: 'u-calc-2',
     courseId: 'c-calc',
     unitNumber: 2,
-    title: 'Unit 2: Infinite Sequences & Series',
-    description: 'Convergence tests (Ratio, Root, Integral), Maclaurin series, and Taylor polynomials.',
+    title: 'Unit 2: Infinite Series & Power Series',
+    description: 'Geometric series, p-series, ratio/root tests, Taylor & Maclaurin polynomials with Lagrange error bound.',
     status: 'unlocked',
     isActiveSpotlight: true,
     order: 2,
   },
-
-  // English Literature
   {
     id: 'u-lit-1',
     courseId: 'c-lit',
     unitNumber: 1,
-    title: 'Unit 1: Short Fiction & Character Motifs',
-    description: 'Narrative structure, unreliable narrators, figurative symbolism, and tone shifts.',
+    title: 'Unit 1: Short Fiction & Character Complexities',
+    description: 'Point of view, unreliable narrators, epiphany moments, and figurative characterization.',
     status: 'unlocked',
     order: 1,
   },
@@ -177,20 +159,18 @@ const initialUnits: Unit[] = [
     id: 'u-lit-2',
     courseId: 'c-lit',
     unitNumber: 2,
-    title: 'Unit 2: The American Dream & Modernist Poetry',
-    description: 'The Great Gatsby thematic analysis, modernist alienation, and poetic scansion.',
+    title: 'Unit 2: The Jazz Age & Rhetorical Modernism',
+    description: 'Analysis of The Great Gatsby, color symbolism, Valley of Ashes motifs, and consumerism critiques.',
     status: 'unlocked',
     isActiveSpotlight: true,
     order: 2,
   },
-
-  // CompSci
   {
     id: 'u-csa-1',
     courseId: 'c-csa',
     unitNumber: 1,
-    title: 'Unit 1: ArrayLists & Object Collections',
-    description: 'Wrapper classes, auto-boxing, traversals, and mutating lists safely.',
+    title: 'Unit 1: Class Design, Inheritance & Polymorphism',
+    description: 'Superclasses, subclasses, overriding methods, object reference hierarchies, and abstract classes.',
     status: 'unlocked',
     order: 1,
   },
@@ -198,186 +178,84 @@ const initialUnits: Unit[] = [
     id: 'u-csa-2',
     courseId: 'c-csa',
     unitNumber: 2,
-    title: 'Unit 2: Recursion & Binary Search Algorithms',
-    description: 'Call stacks, base cases, binary recursive tree exploration, and O(log n) performance.',
+    title: 'Unit 2: Recursion & 2D Arrays',
+    description: 'Base cases, recursive call stacks, row-major and column-major traversals, and maze search algorithms.',
     status: 'unlocked',
     isActiveSpotlight: true,
     order: 2,
   },
-
-  // History
-  {
-    id: 'u-hist-1',
-    courseId: 'c-history',
-    unitNumber: 1,
-    title: 'Unit 1: Colonial America & Early Republic (1607-1800)',
-    description: 'Mercantilism, Salutary neglect, French & Indian War aftermath, and Constitutional debates.',
-    status: 'unlocked',
-    order: 1,
-  },
 ];
 
 const initialResources: ResourceItem[] = [
-  // Chem Resources
   {
     id: 'r-chem-1',
     courseId: 'c-chem',
     unitId: 'u-chem-2',
-    title: 'Unit 2 Reaction Kinetics Master Equation Sheet & Rate Law Rules',
-    description: 'Zero, First, and Second-order integrated rate law graphs, half-life formulas, and Arrhenius plots with hand annotations.',
-    url: 'https://docs.google.com/document/d/1studyvault-chem-kinetics-sheet',
+    title: 'Kinetics Problem Set 4: Multi-Step Reaction Mechanisms (Full HW Key)',
+    description: 'Includes full step-by-step intermediate cancellations, rate-determining step rate law derivations, and catalyst identification.',
+    url: 'https://docs.google.com/document/d/1studyvault-chem-kinetics-hw4-key',
     type: 'doc',
-    category: 'study_guide',
+    category: 'completed_hw',
     visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-28T14:00:00.000Z',
+    isCompletedHw: true,
+    createdAt: '2026-09-29T14:30:00.000Z',
     submittedBy: 'Liam Nystrom',
     viewCount: 42,
-    tags: ['Kinetics', 'Equations', 'Exam Prep'],
-    previewSnippet: 'Integrated rate law graphs: [A] vs t (0-order), ln[A] vs t (1st-order), 1/[A] vs t (2nd-order slope = k).',
+    tags: ['Answer Key', 'Step-by-Step', 'Reaction Mechanisms'],
+    previewSnippet: 'Step 1: NO + O2 <-> NO3 (fast). Step 2: NO3 + NO -> 2 NO2 (slow RDS). Overall Rate = k[NO]^2[O2].',
   },
   {
     id: 'r-chem-2',
     courseId: 'c-chem',
     unitId: 'u-chem-2',
-    title: 'Problem Set #4: Method of Initial Rates - Full Step-by-Step Answer Key',
-    description: 'Complete solved homework problems 1 through 12 with all exponent derivations and units for rate constant k explained.',
-    url: 'https://drive.google.com/file/d/1studyvault-chem-hw4-key/view',
-    type: 'pdf',
-    category: 'completed_hw',
+    title: 'Integrated Rate Laws & Half-Life Cheat Sheet (0th, 1st, 2nd Order)',
+    description: 'Summary table with linear plots: [A] vs t, ln[A] vs t, 1/[A] vs t, units of rate constant k, and graphical tips.',
+    url: 'https://quizlet.com/join/studyvault-chem-rate-laws',
+    type: 'quizlet',
+    category: 'formula_sheet',
     visibilityScope: 'all_enrolled',
-    isCompletedHw: true,
-    createdAt: '2026-09-29T18:30:00.000Z',
-    submittedBy: 'Alex Rivera',
-    viewCount: 68,
-    tags: ['Completed HW', 'Problem Set', 'Rate Laws'],
-    previewSnippet: 'Q3 Answer: Rate = k[NO2]^2[CO]^0. Value of k = 1.45 x 10^-3 M^-1 s^-1. Check step 4 for cancelations.',
+    isCompletedHw: false,
+    createdAt: '2026-09-30T10:15:00.000Z',
+    submittedBy: 'Liam Nystrom',
+    viewCount: 78,
+    tags: ['Kinetics', 'Formula Sheet', 'Quizlet Flashcards'],
+    previewSnippet: 'First-order: ln[A]t = -kt + ln[A]0, t_1/2 = 0.693/k. Second-order: 1/[A]t = kt + 1/[A]0.',
   },
   {
     id: 'r-chem-3',
     courseId: 'c-chem',
     unitId: 'u-chem-2',
     title: 'Crystal Violet Colorimetry Lab: Raw Data & Beer-Lambert Calibration Curve',
-    description: 'Spreadsheet with absorbance vs time data, spectrophotometer calibration slope, and calculated pseudo-first order constant.',
-    url: 'https://docs.google.com/spreadsheets/d/1studyvault-chem-lab-crystal-violet',
+    description: 'Raw absorbance readings at 590nm, path length b=1.0 cm, spectrophotometer calibration curve, and pseudo-first-order rate graphs.',
+    url: 'https://docs.google.com/spreadsheets/d/1studyvault-chem-beer-lambert-lab',
     type: 'sheets',
     category: 'lab_report',
     visibilityScope: 'restricted_students',
-    allowedStudentIds: ['u-alex', 'u-maya'], // Lab group only
+    allowedStudentIds: ['u-alex', 'u-maya'],
     isCompletedHw: true,
-    createdAt: '2026-09-30T10:15:00.000Z',
+    createdAt: '2026-09-27T18:00:00.000Z',
     submittedBy: 'Liam Nystrom',
-    viewCount: 15,
-    tags: ['Lab Report', 'Lab Group 3', 'Beer-Lambert'],
-    previewSnippet: 'Group 3 Lab Partners (Liam, Alex, Maya). Absorbance wavelength set to 590 nm. R^2 fit = 0.9984.',
+    viewCount: 19,
+    tags: ['Lab Report', 'Raw Data', 'Spectroscopy'],
+    previewSnippet: 'Beer-Lambert law: A = epsilon * b * c. Molar absorptivity of crystal violet at 590 nm calculated to be 8.4 x 10^4 M^-1 cm^-1.',
   },
-  {
-    id: 'r-chem-4',
-    courseId: 'c-chem',
-    unitId: 'u-chem-2',
-    title: 'Kinetics & Catalysis Ultimate Quizlet Deck (85 Terms & Mechanisms)',
-    description: 'Flashcard deck covering elementary steps, intermediates vs catalysts, rate-determining steps, and molecularity.',
-    url: 'https://quizlet.com/studyvault-chem-unit2-flashcards',
-    type: 'quizlet',
-    category: 'study_guide',
-    visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-27T08:00:00.000Z',
-    submittedBy: 'Maya Patel',
-    viewCount: 51,
-    tags: ['Flashcards', 'Quizlet', 'Vocab'],
-    previewSnippet: 'Key definitions: Intermediate (produced then consumed), Catalyst (consumed then regenerated).',
-  },
-  {
-    id: 'r-chem-5',
-    courseId: 'c-chem',
-    unitId: 'u-chem-1',
-    title: 'Unit 1 Photoelectron Spectroscopy (PES) & Periodic Trends Slide Deck',
-    description: 'Lecture annotations with binding energy spectrum comparisons for elements Sodium through Argon.',
-    url: 'https://docs.google.com/presentation/d/1studyvault-chem-pes-slides',
-    type: 'slides',
-    category: 'lecture_notes',
-    visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-12T16:00:00.000Z',
-    submittedBy: 'Dr. Henderson / Liam',
-    viewCount: 33,
-    tags: ['PES', 'Atomic Radius', 'Electronegativity'],
-    previewSnippet: 'Slide 14 highlights why 4s electrons are removed before 3d in transition metal cations.',
-  },
-  {
-    id: 'r-chem-6',
-    courseId: 'c-chem',
-    unitId: 'u-chem-2',
-    title: 'Unit 2 Official Mock Practice Exam Key & Scoring Rubric',
-    description: 'Teacher-released previous year mock exam with full AP-style FRQ point distributions. Locked until 24h before exam.',
-    url: 'https://drive.google.com/file/d/1studyvault-chem-mock-exam-key',
-    type: 'pdf',
-    category: 'practice_exam',
-    visibilityScope: 'all_enrolled',
-    scheduledUnlockAt: '2026-10-02T16:00:00.000Z', // Time-locked
-    isCompletedHw: false,
-    createdAt: '2026-09-30T19:00:00.000Z',
-    submittedBy: 'Liam Nystrom',
-    viewCount: 9,
-    tags: ['FRQ Rubric', 'Time-Locked', 'Practice Exam'],
-    previewSnippet: '🔒 This resource unlocks automatically on Thursday at 4:00 PM. Or submit an unlock request to study early.',
-  },
-
-  // Calc Resources
   {
     id: 'r-calc-1',
     courseId: 'c-calc',
     unitId: 'u-calc-2',
-    title: 'Taylor & Maclaurin Series Mega-Cheat Sheet (Sin, Cos, e^x, 1/(1-x))',
-    description: 'Comprehensive table of standard series expansions, radius of convergence, and Lagrange error bound formula.',
-    url: 'https://docs.google.com/document/d/1studyvault-calc-series-sheet',
+    title: 'Taylor & Maclaurin Polynomials HW 3 Solution Key with Lagrange Error Bounds',
+    description: 'Complete calculations showing third and fourth-degree Taylor expansions around x=a, with maximum remainder bounds on intervals.',
+    url: 'https://docs.google.com/document/d/1studyvault-calc-taylor-series-key',
     type: 'doc',
-    category: 'study_guide',
+    category: 'completed_hw',
     visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-29T11:00:00.000Z',
+    isCompletedHw: true,
+    createdAt: '2026-09-29T16:00:00.000Z',
     submittedBy: 'Liam Nystrom',
-    viewCount: 77,
-    tags: ['Taylor Series', 'Convergence', 'Cheat Sheet'],
-    previewSnippet: 'Lagrange Error: |R_n(x)| <= (M / (n+1)!) * |x - c|^(n+1), where M is the maximum of |f^(n+1)(t)|.',
+    viewCount: 53,
+    tags: ['Answer Key', 'Taylor Series', 'Error Bound'],
+    previewSnippet: 'Lagrange Error: |R_n(x)| <= [M / (n+1)!] * |x - c|^(n+1) where M is the maximum of |f^(n+1)(z)|.',
   },
-  {
-    id: 'r-calc-2',
-    courseId: 'c-calc',
-    unitId: 'u-calc-2',
-    title: 'Series Convergence Tests Decision Tree Flowchart (PDF)',
-    description: 'Visual flowchart to decide which test to use first: nth Term Divergence -> Geometric/p-Series -> Ratio -> Alt Series.',
-    url: 'https://drive.google.com/file/d/1studyvault-calc-series-flowchart',
-    type: 'pdf',
-    category: 'study_guide',
-    visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-28T15:20:00.000Z',
-    submittedBy: 'Alex Rivera',
-    viewCount: 61,
-    tags: ['Flowchart', 'Convergence Tests'],
-    previewSnippet: 'Pro tip: Always run the nth-term test in your head first. If lim a_n != 0, it diverges immediately.',
-  },
-  {
-    id: 'r-calc-3',
-    courseId: 'c-calc',
-    unitId: 'u-calc-1',
-    title: 'Integration by Parts & Tabular Method Walkthrough Video (18 min)',
-    description: 'Screen recording showing the D-I (Differentiation-Integration) tabular shortcut for polynomials multiplied by trig/exp.',
-    url: 'https://youtube.com/watch?v=studyvault-calc-tabular-method',
-    type: 'video',
-    category: 'lecture_notes',
-    visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-15T20:00:00.000Z',
-    submittedBy: 'Liam Nystrom',
-    viewCount: 45,
-    tags: ['Tabular Method', 'Integration by Parts', 'Video Walkthrough'],
-    previewSnippet: 'Video timestamps: 00:00 LIATE rule, 04:30 Tabular setup, 11:20 Repeating loop integrals.',
-  },
-
-  // Lit Resources
   {
     id: 'r-lit-1',
     courseId: 'c-lit',
@@ -396,24 +274,6 @@ const initialResources: ResourceItem[] = [
     previewSnippet: 'Chapter 5: "His count of enchanted objects had diminished by one" - Gatsby re-evaluating the green light.',
   },
   {
-    id: 'r-lit-2',
-    courseId: 'c-lit',
-    unitId: 'u-lit-2',
-    title: 'Synthesis Essay Outline & High-Scoring Sample Introduction',
-    description: 'Exemplar thesis statements that earn the complexity point on the AP Lit 6-point scoring rubric.',
-    url: 'https://notion.so/studyvault/gatsby-synthesis-outline',
-    type: 'notion',
-    category: 'completed_hw',
-    visibilityScope: 'all_enrolled',
-    isCompletedHw: true,
-    createdAt: '2026-09-30T12:00:00.000Z',
-    submittedBy: 'Alex Rivera',
-    viewCount: 28,
-    tags: ['Essay Outline', 'Complexity Point', 'AP Rubric'],
-  },
-
-  // CompSci Resources
-  {
     id: 'r-csa-1',
     courseId: 'c-csa',
     unitId: 'u-csa-2',
@@ -426,42 +286,24 @@ const initialResources: ResourceItem[] = [
     isCompletedHw: true,
     createdAt: '2026-09-26T17:00:00.000Z',
     submittedBy: 'Maya Patel',
-    viewCount: 54,
-    tags: ['Java', 'Recursion', 'Backtracking', 'Completed Lab'],
-    previewSnippet: 'Key pattern: mark visited with grid[r][c] = 2; backtrack with grid[r][c] = 0 if path fails.',
-  },
-
-  // History Resources
-  {
-    id: 'r-hist-1',
-    courseId: 'c-history',
-    unitId: 'u-hist-1',
-    title: 'Period 3 (1754-1800) DBQ Document Sourcing Guide (HIPP Analysis)',
-    description: 'Historical context, Intended audience, Purpose, Point of view guidelines for all 7 primary source docs.',
-    url: 'https://docs.google.com/document/d/1studyvault-hist-hipp-guide',
-    type: 'doc',
-    category: 'study_guide',
-    visibilityScope: 'all_enrolled',
-    isCompletedHw: false,
-    createdAt: '2026-09-22T19:10:00.000Z',
-    submittedBy: 'Liam Nystrom',
-    viewCount: 31,
-    tags: ['HIPP', 'DBQ', 'Period 3'],
+    viewCount: 34,
+    tags: ['Java', 'Recursion', 'Backtracking'],
+    previewSnippet: 'if (maze[r][c] == GOAL) return true; maze[r][c] = VISITED; if (solve(r+1,c) || solve(r-1,c)...',
   },
 ];
 
 const initialUsers: User[] = [
   {
     id: 'u-admin',
-    name: 'Liam Nystrom (Admin)',
+    name: 'Vault Administrator',
     username: 'admin',
     role: 'admin',
     status: 'approved',
-    enrolledCourseIds: ['c-chem', 'c-calc', 'c-lit', 'c-csa', 'c-history'],
-    email: 'liamnystrom9@gmail.com',
-    joinedAt: '2026-08-20T08:00:00.000Z',
-    lastLogin: '2026-10-01T17:45:00.000Z',
-    notes: 'Vault Creator & System Administrator',
+    enrolledCourseIds: ['c-chem', 'c-calc', 'c-lit', 'c-csa'],
+    email: 'admin@studyvault.internal',
+    joinedAt: '2026-08-15T08:00:00.000Z',
+    notes: 'Vault Owner & Administrator',
+    aiTutorEnabled: true,
   },
   {
     id: 'u-alex',
@@ -469,11 +311,11 @@ const initialUsers: User[] = [
     username: 'alex',
     role: 'student',
     status: 'approved',
-    enrolledCourseIds: ['c-chem', 'c-calc', 'c-lit'],
+    enrolledCourseIds: ['c-chem', 'c-calc'],
     email: 'alex.rivera@highschool.edu',
-    joinedAt: '2026-08-25T10:00:00.000Z',
-    lastLogin: '2026-10-01T15:20:00.000Z',
-    notes: 'Period 3 Chem Lab Partner & Calc study group',
+    joinedAt: '2026-09-01T10:00:00.000Z',
+    lastLogin: '2026-10-01T19:30:00.000Z',
+    aiTutorEnabled: false, // Default deactivated per user
   },
   {
     id: 'u-maya',
@@ -482,10 +324,10 @@ const initialUsers: User[] = [
     role: 'student',
     status: 'approved',
     enrolledCourseIds: ['c-chem', 'c-csa'],
-    email: 'maya.p@highschool.edu',
-    joinedAt: '2026-08-27T11:30:00.000Z',
-    lastLogin: '2026-09-30T21:10:00.000Z',
-    notes: 'CS lab partner & quizlet author',
+    email: 'maya.patel@highschool.edu',
+    joinedAt: '2026-09-02T11:15:00.000Z',
+    lastLogin: '2026-10-01T20:10:00.000Z',
+    aiTutorEnabled: false, // Default deactivated per user
   },
   {
     id: 'u-liam-student',
@@ -493,32 +335,22 @@ const initialUsers: User[] = [
     username: 'liams',
     role: 'student',
     status: 'approved',
-    enrolledCourseIds: ['c-lit', 'c-history'],
-    joinedAt: '2026-09-01T09:00:00.000Z',
-    lastLogin: '2026-10-01T12:00:00.000Z',
+    enrolledCourseIds: ['c-chem', 'c-lit'],
+    email: 'liam.s@highschool.edu',
+    joinedAt: '2026-09-10T09:00:00.000Z',
+    aiTutorEnabled: false,
   },
   {
-    id: 'u-jordan',
+    id: 'u-jordan-pending',
     name: 'Jordan Hayes',
-    username: 'jordan',
-    role: 'student',
-    status: 'pending',
-    enrolledCourseIds: [],
-    requestedCourses: ['c-chem', 'c-calc', 'c-csa'],
-    email: 'jordan.hayes@students.k12.org',
-    joinedAt: '2026-10-01T14:15:00.000Z',
-    notes: 'New transfer student requesting AP Chem & Calc BC vault access.',
-  },
-  {
-    id: 'u-sam',
-    name: 'Sam Chen',
-    username: 'samc',
+    username: 'jordanh',
     role: 'student',
     status: 'pending',
     enrolledCourseIds: [],
     requestedCourses: ['c-chem', 'c-lit'],
     joinedAt: '2026-10-01T16:30:00.000Z',
     notes: 'Period 1 Lit classmate',
+    aiTutorEnabled: false,
   },
 ];
 
@@ -534,19 +366,6 @@ const initialUnlockRequests: UnlockRequest[] = [
     username: 'liams',
     reason: 'I had an excused absence for the cross-country regional meet on Tuesday. Need the spectrophotometer calibration curve to finish my lab calculation questions.',
     requestedAt: '2026-10-01T11:20:00.000Z',
-    status: 'pending',
-  },
-  {
-    id: 'req-2',
-    resourceId: 'r-chem-6',
-    resourceTitle: 'Unit 2 Official Mock Practice Exam Key & Scoring Rubric',
-    courseId: 'c-chem',
-    courseName: 'AP Chemistry Honors',
-    userId: 'u-alex',
-    userName: 'Alex Rivera',
-    username: 'alex',
-    reason: 'Studying tonight with my tutor since I have family dinner tomorrow during normal review hours. Could I get an early 24-hour pass?',
-    requestedAt: '2026-10-01T13:45:00.000Z',
     status: 'pending',
   },
 ];
@@ -582,35 +401,23 @@ const initialNoteRequests: NoteRequest[] = [
   },
 ];
 
-// In-Memory Data Store with Local State
-let courses: Course[] = [...initialCourses];
-let units: Unit[] = [...initialUnits];
-let resources: ResourceItem[] = [...initialResources];
-let users: User[] = [...initialUsers];
-let unlockRequests: UnlockRequest[] = [...initialUnlockRequests];
-let submissions: StudentSubmission[] = [...initialSubmissions];
-let noteRequests: NoteRequest[] = [...initialNoteRequests];
-
-// Passwords store for secure credential verification
-const userPasswords: Record<string, string> = {
+const initialUserPasswords: Record<string, string> = {
   'u-admin': 'vaultadmin',
   'u-alex': 'alex123',
   'u-maya': 'maya123',
   'u-liam-student': 'liams123',
 };
 
-// Global Site Settings (Maintenance Mode & AI Tutor Toggle)
-let siteSettings: SiteSettings = {
+const initialSiteSettings: SiteSettings = {
   maintenanceMode: {
     enabled: false,
     countdownTarget: new Date(Date.now() + 3600 * 1000 * 2).toISOString(), // 2 hours
     message: 'StudyVault is undergoing scheduled unit restructuring and updates. Back soon!',
   },
-  aiTutorEnabled: false, // Deactivated by default for all accounts unless enabled by admin!
+  aiTutorEnabled: false, // Deactivated by default for all accounts
 };
 
-// Admin Popups / Broadcast Announcements (Global or Individual)
-let popups: AdminPopup[] = [
+const initialPopups: AdminPopup[] = [
   {
     id: 'pop-1',
     title: 'Welcome to StudyVault',
@@ -621,6 +428,105 @@ let popups: AdminPopup[] = [
     active: true,
   },
 ];
+
+// File-backed Persistence Path
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DB_FILE = path.join(DATA_DIR, 'studyvault-db.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// In-Memory Data Store variables
+let courses: Course[] = [];
+let units: Unit[] = [];
+let resources: ResourceItem[] = [];
+let users: User[] = [];
+let unlockRequests: UnlockRequest[] = [];
+let submissions: StudentSubmission[] = [];
+let noteRequests: NoteRequest[] = [];
+let userPasswords: Record<string, string> = {};
+let siteSettings: SiteSettings = { ...initialSiteSettings };
+let popups: AdminPopup[] = [];
+
+// Helper to save current database state to disk
+function saveDb() {
+  try {
+    const dbPayload = {
+      courses,
+      units,
+      resources,
+      users,
+      unlockRequests,
+      submissions,
+      noteRequests,
+      userPasswords,
+      siteSettings,
+      popups,
+    };
+    fs.writeFileSync(DB_FILE, JSON.stringify(dbPayload, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write studyvault-db.json:', err);
+  }
+}
+
+// Helper to load or initialize database
+function loadDb() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      courses = data.courses || [];
+      units = data.units || [];
+      resources = data.resources || [];
+      users = data.users || [];
+      unlockRequests = data.unlockRequests || [];
+      submissions = data.submissions || [];
+      noteRequests = data.noteRequests || [];
+      userPasswords = data.userPasswords || {};
+      siteSettings = data.siteSettings || initialSiteSettings;
+      popups = data.popups || [];
+
+      // Make sure admin always exists
+      if (!users.some((u) => u.role === 'admin')) {
+        users.unshift(initialUsers[0]);
+        userPasswords[initialUsers[0].id] = 'vaultadmin';
+      }
+      console.log(`StudyVault DB loaded from ${DB_FILE} with ${courses.length} courses, ${users.length} users.`);
+    } else {
+      // First boot: populate with initial seed data and save to file
+      courses = [...initialCourses];
+      units = [...initialUnits];
+      resources = [...initialResources];
+      users = [...initialUsers];
+      unlockRequests = [...initialUnlockRequests];
+      submissions = [...initialSubmissions];
+      noteRequests = [...initialNoteRequests];
+      userPasswords = { ...initialUserPasswords };
+      siteSettings = { ...initialSiteSettings };
+      popups = [...initialPopups];
+      saveDb();
+      console.log(`Created new StudyVault DB at ${DB_FILE}.`);
+    }
+  } catch (err) {
+    console.error('Error loading DB, initializing defaults:', err);
+    courses = [...initialCourses];
+    units = [...initialUnits];
+    resources = [...initialResources];
+    users = [...initialUsers];
+    unlockRequests = [...initialUnlockRequests];
+    submissions = [...initialSubmissions];
+    noteRequests = [...initialNoteRequests];
+    userPasswords = { ...initialUserPasswords };
+    siteSettings = { ...initialSiteSettings };
+    popups = [...initialPopups];
+    saveDb();
+  }
+}
+
+// Load DB on server launch
+loadDb();
 
 // --- REST API Endpoints ---
 
@@ -679,11 +585,17 @@ app.post('/api/auth/login', (req, res) => {
 
   // Update lastLogin
   user.lastLogin = new Date().toISOString();
+  saveDb();
 
   res.json({
     user,
     message: `Welcome back, ${user.name}!`,
   });
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', (_req, res) => {
+  res.json({ success: true, message: 'Logged out successfully' });
 });
 
 // Student Registration
@@ -712,10 +624,12 @@ app.post('/api/auth/register', (req, res) => {
     email: email || undefined,
     joinedAt: new Date().toISOString(),
     notes: notes || undefined,
+    aiTutorEnabled: false, // Always deactivated by default for new students!
   };
 
   users.push(newUser);
   userPasswords[newUser.id] = password || 'study123';
+  saveDb();
 
   res.status(201).json({
     user: newUser,
@@ -734,6 +648,7 @@ app.post('/api/admin/users/:id/approve-request', (req, res) => {
   targetUser.status = 'approved';
   targetUser.enrolledCourseIds = courseIds || targetUser.requestedCourses || [];
   targetUser.requestedCourses = [];
+  saveDb();
 
   res.json({ user: targetUser, message: `${targetUser.name} has been approved.` });
 });
@@ -743,6 +658,7 @@ app.post('/api/admin/users/:id/reject-request', (req, res) => {
   const { id } = req.params;
   users = users.filter((u) => u.id !== id);
   delete userPasswords[id];
+  saveDb();
   res.json({ success: true, message: 'Request removed.' });
 });
 
@@ -755,6 +671,7 @@ app.post('/api/admin/users/:id/update-courses', (req, res) => {
   if (!targetUser) return res.status(404).json({ error: 'User not found' });
 
   targetUser.enrolledCourseIds = courseIds || [];
+  saveDb();
   res.json({ user: targetUser });
 });
 
@@ -765,7 +682,32 @@ app.post('/api/admin/users/:id/toggle-status', (req, res) => {
   if (!targetUser) return res.status(404).json({ error: 'User not found' });
 
   targetUser.status = targetUser.status === 'approved' ? 'suspended' : 'approved';
+  saveDb();
   res.json({ user: targetUser });
+});
+
+// Admin toggle user AI tutor access (per user!)
+app.post('/api/admin/users/:id/toggle-ai', (req, res) => {
+  const { id } = req.params;
+  const targetUser = users.find((u) => u.id === id);
+  if (!targetUser) return res.status(404).json({ error: 'User not found' });
+
+  targetUser.aiTutorEnabled = !targetUser.aiTutorEnabled;
+  saveDb();
+  res.json({ user: targetUser, message: `AI Tutor access for ${targetUser.name} set to ${targetUser.aiTutorEnabled ? 'Enabled' : 'Disabled'}` });
+});
+
+// Admin toggle AI tutor access for ALL students
+app.post('/api/admin/users/toggle-ai-all', (req, res) => {
+  const { enabled } = req.body;
+  users.forEach((u) => {
+    if (u.role !== 'admin') {
+      u.aiTutorEnabled = !!enabled;
+    }
+  });
+  siteSettings.aiTutorEnabled = !!enabled;
+  saveDb();
+  res.json({ users, aiTutorEnabled: siteSettings.aiTutorEnabled });
 });
 
 // Admin reset user password
@@ -778,6 +720,7 @@ app.post('/api/admin/users/:id/reset-password', (req, res) => {
 
   targetUser.temporaryPassword = temporaryPassword || 'study123';
   userPasswords[targetUser.id] = targetUser.temporaryPassword || 'study123';
+  saveDb();
 
   res.json({
     user: targetUser,
@@ -797,6 +740,7 @@ app.post('/api/admin/settings', (req, res) => {
   if (aiTutorEnabled !== undefined) {
     siteSettings.aiTutorEnabled = !!aiTutorEnabled;
   }
+  saveDb();
   res.json({ siteSettings });
 });
 
@@ -807,6 +751,7 @@ app.post('/api/admin/popups', (req, res) => {
   popupData.createdAt = new Date().toISOString();
   popupData.active = true;
   popups.unshift(popupData);
+  saveDb();
   res.status(201).json({ popup: popupData });
 });
 
@@ -815,13 +760,64 @@ app.post('/api/admin/popups/:id/toggle', (req, res) => {
   const p = popups.find((x) => x.id === id);
   if (!p) return res.status(404).json({ error: 'Popup not found' });
   p.active = !p.active;
+  saveDb();
   res.json({ popup: p });
 });
 
 app.delete('/api/admin/popups/:id', (req, res) => {
   const { id } = req.params;
   popups = popups.filter((x) => x.id !== id);
+  saveDb();
   res.json({ success: true });
+});
+
+// Clean Slate: Wipe sample items and start fresh with empty vault (Admin only keeps account)
+app.post('/api/admin/clean-slate', (_req, res) => {
+  courses = [];
+  units = [];
+  resources = [];
+  unlockRequests = [];
+  submissions = [];
+  noteRequests = [];
+  popups = [];
+  // Keep only admin user
+  users = users.filter((u) => u.role === 'admin');
+  if (users.length === 0) {
+    users = [initialUsers[0]];
+    userPasswords[initialUsers[0].id] = 'vaultadmin';
+  }
+  saveDb();
+  res.json({
+    success: true,
+    message: 'Vault cleared to a clean slate. You can now create your real courses and add real materials.',
+    courses,
+    units,
+    resources,
+    users,
+  });
+});
+
+// Reset to Sample Template Demo Data
+app.post('/api/admin/reset-demo', (_req, res) => {
+  courses = [...initialCourses];
+  units = [...initialUnits];
+  resources = [...initialResources];
+  users = [...initialUsers];
+  unlockRequests = [...initialUnlockRequests];
+  submissions = [...initialSubmissions];
+  noteRequests = [...initialNoteRequests];
+  userPasswords = { ...initialUserPasswords };
+  siteSettings = { ...initialSiteSettings };
+  popups = [...initialPopups];
+  saveDb();
+  res.json({
+    success: true,
+    message: 'Reset vault to starter demo template.',
+    courses,
+    units,
+    resources,
+    users,
+  });
 });
 
 // Course Creation / Update
@@ -835,6 +831,7 @@ app.post('/api/courses', (req, res) => {
     if (idx >= 0) courses[idx] = { ...courses[idx], ...courseData };
     else courses.push(courseData);
   }
+  saveDb();
   res.json({ course: courseData });
 });
 
@@ -844,10 +841,10 @@ app.delete('/api/courses/:id', (req, res) => {
   courses = courses.filter((c) => c.id !== id);
   units = units.filter((u) => u.courseId !== id);
   resources = resources.filter((r) => r.courseId !== id);
-  // Also remove from enrolled course arrays
   users.forEach((u) => {
     u.enrolledCourseIds = u.enrolledCourseIds.filter((cid) => cid !== id);
   });
+  saveDb();
   res.json({ success: true });
 });
 
@@ -864,6 +861,7 @@ app.post('/api/courses/reorder', (req, res) => {
     if (!ordered.some((x) => x.id === c.id)) ordered.push(c);
   });
   courses = ordered;
+  saveDb();
   res.json({ courses });
 });
 
@@ -878,6 +876,7 @@ app.post('/api/units', (req, res) => {
     if (idx >= 0) units[idx] = { ...units[idx], ...unitData };
     else units.push(unitData);
   }
+  saveDb();
   res.json({ unit: unitData });
 });
 
@@ -886,6 +885,7 @@ app.delete('/api/units/:id', (req, res) => {
   const { id } = req.params;
   units = units.filter((u) => u.id !== id);
   resources = resources.filter((r) => r.unitId !== id);
+  saveDb();
   res.json({ success: true });
 });
 
@@ -912,6 +912,7 @@ app.post('/api/units/reorder', (req, res) => {
     unit.order = tempOrder;
   }
 
+  saveDb();
   res.json({ units });
 });
 
@@ -925,6 +926,23 @@ app.post('/api/resources/:id/move', (req, res) => {
   if (!unit) return res.status(404).json({ error: 'Target unit not found' });
   item.unitId = newUnitId;
   item.courseId = unit.courseId;
+  saveDb();
+  res.json({ resource: item });
+});
+
+// Resource Quick Visibility Switch
+app.post('/api/resources/:id/visibility', (req, res) => {
+  const { id } = req.params;
+  const { visibilityScope, allowedStudentIds, scheduledUnlockAt, autoLockAt } = req.body;
+  const item = resources.find((r) => r.id === id);
+  if (!item) return res.status(404).json({ error: 'Resource not found' });
+
+  if (visibilityScope) item.visibilityScope = visibilityScope;
+  if (allowedStudentIds !== undefined) item.allowedStudentIds = allowedStudentIds;
+  if (scheduledUnlockAt !== undefined) item.scheduledUnlockAt = scheduledUnlockAt;
+  if (autoLockAt !== undefined) item.autoLockAt = autoLockAt;
+
+  saveDb();
   res.json({ resource: item });
 });
 
@@ -941,6 +959,7 @@ app.post('/api/resources', (req, res) => {
     if (idx >= 0) resources[idx] = { ...resources[idx], ...resData };
     else resources.unshift(resData);
   }
+  saveDb();
   res.json({ resource: resData });
 });
 
@@ -948,6 +967,7 @@ app.post('/api/resources', (req, res) => {
 app.delete('/api/resources/:id', (req, res) => {
   const { id } = req.params;
   resources = resources.filter((r) => r.id !== id);
+  saveDb();
   res.json({ success: true });
 });
 
@@ -957,6 +977,7 @@ app.post('/api/resources/:id/view', (req, res) => {
   const item = resources.find((r) => r.id === id);
   if (item) {
     item.viewCount = (item.viewCount || 0) + 1;
+    saveDb();
     res.json({ viewCount: item.viewCount });
   } else {
     res.status(404).json({ error: 'Resource not found' });
@@ -982,13 +1003,14 @@ app.post('/api/unlock-requests', (req, res) => {
   };
 
   unlockRequests.unshift(newReq);
+  saveDb();
   res.status(201).json({ request: newReq });
 });
 
 // Admin responds to Unlock Request
 app.post('/api/unlock-requests/:id/respond', (req, res) => {
   const { id } = req.params;
-  const { decision, adminNote } = req.body; // 'approve_permanent' | 'approve_temporary' | 'denied'
+  const { decision, adminNote } = req.body;
 
   const unlockReq = unlockRequests.find((r) => r.id === id);
   if (!unlockReq) return res.status(404).json({ error: 'Request not found' });
@@ -997,13 +1019,11 @@ app.post('/api/unlock-requests/:id/respond', (req, res) => {
   unlockReq.adminNote = adminNote || undefined;
 
   if (decision === 'approve_temporary') {
-    // 24 hours pass
     const expires = new Date();
     expires.setHours(expires.getHours() + 24);
     unlockReq.temporaryExpiresAt = expires.toISOString();
   }
 
-  // If approved, update resource allowed students if it's restricted
   if (decision === 'approve_permanent' || decision === 'approve_temporary') {
     const resource = resources.find((r) => r.id === unlockReq.resourceId);
     if (resource) {
@@ -1014,6 +1034,7 @@ app.post('/api/unlock-requests/:id/respond', (req, res) => {
     }
   }
 
+  saveDb();
   res.json({ request: unlockReq });
 });
 
@@ -1024,13 +1045,14 @@ app.post('/api/submissions', (req, res) => {
   subData.submittedAt = new Date().toISOString();
   subData.status = 'pending';
   submissions.unshift(subData);
+  saveDb();
   res.status(201).json({ submission: subData });
 });
 
 // Admin reviews Student Submission
 app.post('/api/submissions/:id/review', (req, res) => {
   const { id } = req.params;
-  const { action, publishCourseId, publishUnitId } = req.body; // 'approve' | 'reject'
+  const { action, publishCourseId, publishUnitId } = req.body;
 
   const sub = submissions.find((s) => s.id === id);
   if (!sub) return res.status(404).json({ error: 'Submission not found' });
@@ -1038,7 +1060,6 @@ app.post('/api/submissions/:id/review', (req, res) => {
   sub.status = action === 'approve' ? 'approved' : 'rejected';
 
   if (action === 'approve') {
-    // Convert to live resource
     const newResource: ResourceItem = {
       id: `r-${Date.now()}`,
       courseId: publishCourseId || sub.courseId,
@@ -1058,6 +1079,7 @@ app.post('/api/submissions/:id/review', (req, res) => {
     resources.unshift(newResource);
   }
 
+  saveDb();
   res.json({ submission: sub });
 });
 
@@ -1068,6 +1090,7 @@ app.post('/api/notes-requests', (req, res) => {
   noteData.createdAt = new Date().toISOString();
   noteData.status = 'open';
   noteRequests.unshift(noteData);
+  saveDb();
   res.status(201).json({ noteRequest: noteData });
 });
 
@@ -1083,6 +1106,7 @@ app.post('/api/notes-requests/:id/fulfill', (req, res) => {
   noteReq.fulfilledBy = fulfilledBy;
   noteReq.fulfilledUrl = fulfilledUrl;
 
+  saveDb();
   res.json({ noteRequest: noteReq });
 });
 
@@ -1091,19 +1115,19 @@ app.post('/api/notes-requests/:id/fulfill', (req, res) => {
 // 1. Multi-turn AI Study Assistant Chatbot
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages, courseContext, speedPreference, enableHighThinking, systemRole, userRole } = req.body;
+    const { messages, courseContext, speedPreference, enableHighThinking, systemRole, userId, userRole } = req.body;
 
-    // Check if AI Tutor is enabled by admin
-    if (!siteSettings.aiTutorEnabled && userRole !== 'admin') {
-      return res.status(403).json({
-        error: 'AI Tutor is currently deactivated for all accounts by the administrator.',
-      });
+    // Check if AI Tutor is enabled per user (admin always allowed)
+    if (userRole !== 'admin') {
+      const callingUser = users.find((u) => u.id === userId);
+      const isAllowed = callingUser?.aiTutorEnabled || false;
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'AI Tutor is deactivated for your account. Please ask the administrator to enable it.',
+        });
+      }
     }
 
-    // Model selection based on user instructions:
-    // - gemini-3.1-pro-preview for particularly complex tasks & high thinking
-    // - gemini-3.5-flash for general tasks
-    // - gemini-3.1-flash-lite for tasks that should happen fast
     let selectedModel = 'gemini-3.5-flash';
     if (speedPreference === 'fast') {
       selectedModel = 'gemini-3.1-flash-lite';
@@ -1132,16 +1156,13 @@ Guidelines:
 
     if (enableHighThinking && selectedModel === 'gemini-3.1-pro-preview') {
       config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
-      // Do not set maxOutputTokens when using thinkingLevel
     }
 
-    // Format contents from messages
     const formattedContents = (messages || []).map((msg: any) => ({
       role: msg.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: msg.content }],
     }));
 
-    // If empty, supply default
     if (formattedContents.length === 0) {
       formattedContents.push({ role: 'user', parts: [{ text: 'Hello!' }] });
     }
@@ -1155,7 +1176,6 @@ Guidelines:
       });
     } catch (primaryErr: any) {
       console.warn(`Primary model ${selectedModel} failed, falling back to gemini-3.8-flash:`, primaryErr?.message);
-      // Graceful fallback to gemini-3.8-flash
       response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: formattedContents,
@@ -1176,23 +1196,25 @@ Guidelines:
   }
 });
 
-// 2. Homework / Study Notes Image Understanding (gemini-3.1-pro-preview)
+// 2. Homework / Study Notes Image Understanding
 app.post('/api/analyze-image', async (req, res) => {
   try {
-    const { imageBase64, mimeType, prompt, courseContext, userRole } = req.body;
+    const { imageBase64, mimeType, prompt, courseContext, userId, userRole } = req.body;
 
-    // Check if AI Tutor is enabled by admin
-    if (!siteSettings.aiTutorEnabled && userRole !== 'admin') {
-      return res.status(403).json({
-        error: 'AI Tutor is currently deactivated for all accounts by the administrator.',
-      });
+    if (userRole !== 'admin') {
+      const callingUser = users.find((u) => u.id === userId);
+      const isAllowed = callingUser?.aiTutorEnabled || false;
+      if (!isAllowed) {
+        return res.status(403).json({
+          error: 'AI Tutor is deactivated for your account. Please ask the administrator to enable it.',
+        });
+      }
     }
 
     if (!imageBase64) {
       return res.status(400).json({ error: 'No image data provided' });
     }
 
-    // Strip data prefix if passed
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
 
     const imagePart = {
